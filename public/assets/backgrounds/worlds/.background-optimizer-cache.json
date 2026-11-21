@@ -1,0 +1,107 @@
+{
+  "world 1 frozen kingdom.png": {
+    "output_sha256": "d74fe04c91244d40192b45d1ef0e11ab0d5f4f7026193a7946a486dda128cdce",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "6af0324427a6c1e08d0e7639b6a077b722c105884cc1b2432db1c69cf3d58353"
+  },
+  "world 2 ice forest.png": {
+    "output_sha256": "96f8def2027bbf8ef4a3641308a95742dda491c8a90d42a2901f94e263a4b489",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "f8c6fc27bbf84985f9f191fb519db360576ba1b086f60bd122adeccaaecda235"
+  },
+  "world 3 crystal mountain.png": {
+    "output_sha256": "41dcfc62e5a5d4077abbd007323d00637a2129964e58c6489235a7d0a6e0f34f",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "522d0266e2b8d96afea7580e157c4ad5f442b89c0b6591ffdf7c73bb1aca5c2f"
+  },
+  "world 4 fozen ocean.png": {
+    "output_sha256": "b030e26f400425891ede9672f39762035e8ee779635f4aebb2e7ecaf20f4b67c",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "0921be56c18661c0c2c2aa49fac6a8641bcff9974a76234748fa423fadc8fae4"
+  },
+  "world 5 dream desert.png": {
+    "output_sha256": "e9fdd7d2441130082cef2fdc0d7c47c8717685f1a0527b21523ef3d0ce8f54f7",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "ac9da14352cd0bfa24e79d458efb4c9ee60e81bcabcb5132b7c3fbd906ae5226"
+  },
+  "world 6 sky of aurora.png": {
+    "output_sha256": "7c5131dc6b1f723cdab29fc3530132710dcc5f2a8b4e8880705ef8ccf4d88df1",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "d0fe82f1c3eefc3b39c9e9d663f19471da775974e9e79fdb1287bab1454a3315"
+  },
+  "world 7 celestial palace.png": {
+    "output_sha256": "653d6d8e55a1c3836510d68afea2aa0ee37ee70efb74d8ad40f8429a34970963",
+    "settings": {
+      "lossless": false,
+      "max_size": [
+        1080,
+        1920
+      ],
+      "method": 6,
+      "pillow_version": "13.0.0",
+      "quality": 82,
+      "version": 1
+    },
+    "source_sha256": "ddfc46cd99077907ce6030d8ff26c85911017184620ddda1d8f54ee6a39a1334"
+  }
+}
