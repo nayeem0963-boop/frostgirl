@@ -1,5 +1,4 @@
 import { useGLTF } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
 import { useMemo } from 'react'
 import { Box3, Color, Vector3 } from 'three'
 import { ASSETS } from '../assets.js'
@@ -46,39 +45,4 @@ export function MountainMassif({ world }) {
   return <primitive object={object} />
 }
 
-/**
- * The scanned Snow Pine Forest GLB is a small grove (~5 spruces). It is
- * placed as varied groves along the valley sides, between the procedural trees.
- */
-export function ForestClusters({ world, range = 120 }) {
-  const { scene } = useGLTF(ASSETS.forest)
-  const group = useMemo(() => {
-    scene.traverse((o) => {
-      if (o.isMesh) {
-        o.material.envMapIntensity = 0.5
-        o.material.roughness = 1
-        // Groves are midground set dressing: receive shadows, don't cast (perf).
-        o.castShadow = false
-        o.receiveShadow = true
-      }
-    })
-    return world.scatter.groves.map((g) => {
-      const c = scene.clone(true)
-      c.scale.set(g.s * g.sx, g.s * g.sy, g.s * g.sz)
-      c.rotation.y = g.r
-      // Grove spans y -0.7..0.7 in model units: sit the trunks in the snow.
-      c.position.set(g.x, g.y + c.scale.y * 0.66, g.z)
-      return c
-    })
-  }, [scene, world])
-  // Distance cull: each grove is ~60k triangles, only draw the nearby ones.
-  useFrame(({ camera }) => {
-    for (const g of group) {
-      g.visible = (g.position.x - camera.position.x) ** 2 + (g.position.z - camera.position.z) ** 2 < range * range
-    }
-  })
-  return group.map((g, i) => <primitive key={i} object={g} />)
-}
-
 useGLTF.preload(ASSETS.massif)
-useGLTF.preload(ASSETS.forest)

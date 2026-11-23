@@ -9,7 +9,7 @@ unchanged and still launches on its own.
 | `/` | Game selection screen |
 | `/?game=original` | Original Frost Girl runner (`src/App.jsx`, unchanged) |
 | `/?game=frost` | Frost expedition (`src/expedition/`) |
-| `/?game=frost&viewer=aisha&clip=walk&t=0.4` | Dev-only asset/clip viewer (`aisha`, `wolf`, `massif`, `forest`) |
+| `/?game=frost&viewer=aisha&clip=walk&t=0.4` | Dev-only asset/clip viewer (`aisha`, `wolf`, `massif`, `spruces`; `&lod=0..3` for spruces) |
 
 Each game is lazy-loaded and switching goes through a full page navigation, so
 the two never share runtime state, CSS or input listeners. Frost CSS is scoped
@@ -71,14 +71,16 @@ Source GLBs live in `assets-source/` (git-ignored, ~1.9 GB). Runtime GLBs are
 generated into `public/assets/expedition/` (~8 MB total):
 
 ```sh
-node --max-old-space-size=12000 scripts/build-expedition-assets.mjs path/to/assets-source [aisha|wolf|massif|forest]
+node --max-old-space-size=14000 scripts/build-expedition-assets.mjs path/to/assets-source [aisha|wolf|massif|spruces]
 ```
 
 The script (gltf-transform + meshoptimizer + sharp, dev dependencies only)
 merges Aisha's seven animation exports into one rigged GLB, remaps the Mixamo
 bone names onto the Meshy skeleton (by hierarchy: Meshy's spine is
 `Hips > Spine02 > Spine01 > Spine`), removes baked root motion from the sprint
-and slide clips, decimates meshes and converts textures to WebP.
+and slide clips, decimates meshes and converts textures to WebP. It also cuts
+the Meshy forest scan into eight individual spruces (crown detection, mound
+removal, per-tree trunk base) and builds four LODs per spruce.
 
 ## Asset inventory
 
@@ -101,7 +103,7 @@ loaded and checked in the game and in the clip viewer.
 | `natures/frost_wolf_optimized.glb` | 61.7 MB | Same wolf, unrigged; identical to `Meshy_AI_frost_wolf_optimized_…glb` | Static fallback candidate | ✅ duplicate (md5) |
 | `natures/frost_alpine_mountain.glb` | 245.3 MB | **Not a mountain**: byte-identical to `Meshy_AI_frost_alpine_mountain_wolf_…glb`, a 7M-tri wolf sculpt | Not used | ⚠️ misnamed |
 | `natures/frost_mountain_massif.glb` | 75.7 MB | 1.38M tris, 2×4K + 2K JPEG | Distant summit landmark | ✅ in game |
-| `natures/alpine_winter_forest_.glb` | 351.7 MB | 7.66M tris — a grove of ~5 snowy spruces | Groves along the valley sides | ✅ in game |
+| `natures/alpine_winter_forest_.glb` | 351.7 MB | 7.66M tris — one fused mesh: a snow mound with ~10 spruces | Source of all forest trees (8 spruces extracted) | ✅ in game |
 
 Runtime outputs (`public/assets/expedition/`):
 
@@ -110,17 +112,20 @@ Runtime outputs (`public/assets/expedition/`):
 | `aisha.glb` | 3.1 MB | 47.7k | 1K WebP ×3 | idle, walk, run, sprint, jump, land, slide, celebrate |
 | `wolf.glb` | 1.5 MB | 10.2k | 1K WebP ×3 | walk, run |
 | `mountain-massif.glb` | 3.9 MB | 83k | 2K WebP | — |
-| `snow-pine-forest.glb` | 1.3 MB | 61k | 1K WebP | — |
+| `alpine-spruces.glb` | 4.6 MB | 8 spruces × 4 LODs (~8k / 1.8k / 300 / 85 tris) | 2K WebP (shared) | — |
 
 ## Known limitations
 
-- The forest groves are aggressively decimated scans (shaggy up close); they
-  are kept 11 m+ from the trail and distance-culled.
+- Forest: every tree is one of 8 spruces cut from the Meshy scan. Very close
+  up (< ~5 m) the decimated scan shows some stretched needle texture; the
+  close LOD is limited to 8k triangles for performance. Trees keep trunk
+  colliders; crowns are kept clear of the trail corridor.
 - No audio yet.
 - Wolf has only walk/run clips: when it stops (alert/warn) it holds a walk
   frame with a lowered, growling crouch rather than a dedicated idle/growl clip.
 - No dedicated fall clip: the airborne part of `Regular_Jump` is held.
 - Performance measured on an integrated AMD Radeon GPU (headless Chrome,
-  1280×720): ~48–50 fps, 110–150 draw calls, 1.0–1.2M triangles in view.
+  1280×720): ~17–18 ms median frame time (same as the earlier procedural
+  forest within noise), ~90 draw calls, ~1.2M triangles.
   Mobile hardware has not been tested on a real device (touch controls were
   tested with device emulation).

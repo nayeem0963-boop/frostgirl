@@ -8,6 +8,7 @@ import { AnimationMixer, Box3, Vector3 } from 'three'
 import { ASSETS } from '../assets.js'
 
 function Model({ url, clip, t }) {
+  const q = new URLSearchParams(window.location.search)
   const gltf = useGLTF(url)
   const { mixer, scene, height } = useMemo(() => {
     const scene = gltf.scene
@@ -15,6 +16,13 @@ function Model({ url, clip, t }) {
     const c = gltf.animations.find((a) => a.name === clip) ?? gltf.animations[0]
     if (c) mixer.clipAction(c).play()
     if (t != null) mixer.setTime(t)
+    // Spruce sheet: LOD0 in the front row, LOD1 behind it.
+    if (url.includes('spruces')) {
+      scene.children.forEach((n) => {
+        const m = n.name.match(/spruce(\d+)_lod(\d)/)
+        if (m) { n.position.set((Number(m[1]) - 4) * 0.75, 0, -Number(m[2]) * 1.2); n.visible = !q.has('lod') || q.get('lod') === m[2] }
+      })
+    }
     const box = new Box3().setFromObject(scene)
     return { mixer, scene, height: box.getSize(new Vector3()).y }
   }, [gltf, clip, t])

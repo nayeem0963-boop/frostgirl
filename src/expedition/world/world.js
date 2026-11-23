@@ -8,6 +8,14 @@ import { createNoise2D, fbm, mulberry32 } from '../core/noise.js'
 
 const nT = createNoise2D(71)
 const nR = createNoise2D(83)
+const nStand = createNoise2D(151) // forest stands: neighbouring trees share age/size
+const nMeadow = createNoise2D(167) // natural openings in the forest
+
+// Meshy spruce variants (see scripts/build-expedition-assets.mjs "spruces"):
+// 0-3 mature, clear lower trunk; 4-7 younger, fuller to the ground.
+export const SPRUCE_VARIANTS = 8
+const MATURE = [0, 1, 2, 3]
+const YOUNG = [4, 5, 6, 7]
 
 function clearings() {
   return [
@@ -33,27 +41,52 @@ function scatter(sampler) {
   const n = { x: 0, y: 1, z: 0 }
 
   // Near forest: jittered grid with noise-driven density (irregular groves).
+  // `rand` is shared with the rock placement below. To keep every rock (and
+  // its collider) where it was, `legacyDraws` replays the exact rand() calls
+  // of the original tree loop; all new tree attributes use `treeRand`.
+  const treeRand = mulberry32(4321)
   const sp = 4.2
+  const accept = (px, pz) => {
+    nearestTrail(px, pz, t)
+    if (t.d < 5.2) return false
+    const ledge = t.s > LEVEL.ledge.s0 - 8 && t.s < LEVEL.ledge.s1 + 8
+    if (ledge && t.side > 0 && t.side < 30) return false
+    if (streamDistance(px, pz) < 4.5) return false
+    if (inClearing(clear, px, pz)) return false
+    sampler.normal(px, pz, n)
+    return n.y >= 0.8
+  }
+  const groveDensity = (px, pz) => fbm(nT, px / 45, pz / 45, 3) + 0.25 - (t.s / TRAIL_LENGTH) * 0.55 + (t.d < 12 ? 0.18 : 0)
   for (let z = NEAR_BOUNDS.minZ + 2; z < NEAR_BOUNDS.maxZ - 2; z += sp) {
     for (let x = NEAR_BOUNDS.minX + 2; x < NEAR_BOUNDS.maxX - 2; x += sp) {
-      const px = x + (rand() - 0.5) * sp * 0.95
-      const pz = z + (rand() - 0.5) * sp * 0.95
-      nearestTrail(px, pz, t)
-      if (t.d < 5.2) continue
-      const ledge = t.s > LEVEL.ledge.s0 - 8 && t.s < LEVEL.ledge.s1 + 8
-      if (ledge && t.side > 0 && t.side < 30) continue
-      if (streamDistance(px, pz) < 4.5) continue
-      if (inClearing(clear, px, pz)) continue
-      sampler.normal(px, pz, n)
-      if (n.y < 0.8) continue
-      // Groves: density noise + more trees in the lower forest, thinning uphill.
+      const lx = x + (rand() - 0.5) * sp * 0.95
+      const lz = z + (rand() - 0.5) * sp * 0.95
+      // Legacy rand() bookkeeping (grove threshold + 4 attribute draws).
+      if (accept(lx, lz) && groveDensity(lx, lz) >= 0.05 + rand() * 0.25) { rand(); rand(); rand(); rand() }
+
+      // New placement: noise displacement breaks up residual grid rows.
+      const px = lx + nStand(x / 9, z / 9) * 1.3
+      const pz = lz + nStand(z / 9 + 40, x / 9) * 1.3
+      if (!accept(px, pz)) continue
+      if (groveDensity(px, pz) < 0.05 + treeRand() * 0.25) continue
+      // Natural openings away from the trail.
+      if (t.d > 14 && fbm(nMeadow, px / 60, pz / 60, 2) < -0.32) continue
+      // Forest edge along the trail: sparser, so the corridor stays readable.
+      if (t.d < 9 && treeRand() < 0.45) continue
+      // Height in metres: smaller near the trail, taller stands further out;
+      // neighbouring trees share a stand age so sizes vary in patches.
       const altitudeThin = t.s / TRAIL_LENGTH
-      const grove = fbm(nT, px / 45, pz / 45, 3) + 0.25 - altitudeThin * 0.55
-      const edgeBoost = t.d < 12 ? 0.18 : 0
-      if (grove + edgeBoost < 0.05 + rand() * 0.25) continue
+      const stand = 0.85 + 0.3 * (fbm(nStand, px / 38, pz / 38, 2) + 0.5)
+      const base = t.d < 10 ? 8 + treeRand() * 4 : t.d < 25 ? 10 + treeRand() * 7 : 13 + treeRand() * 10
+      let h = base * stand * (1 - altitudeThin * 0.2)
+      // Keep crowns (radius ~0.22 h) from overhanging the trail corridor.
+      const maxH = (t.d - 4.6) / 0.22
+      if (maxH < 6) continue
+      if (h > maxH) h = maxH * (0.9 + treeRand() * 0.1)
+      const pool = t.d < 12 ? MATURE : treeRand() < 0.55 ? MATURE : YOUNG
+      const v = pool[Math.floor(treeRand() * pool.length)]
       const y = sampler.height(px, pz)
-      const size = 0.65 + rand() * 0.7 + (t.d > 20 ? 0.25 : 0)
-      trees.push({ x: px, y, z: pz, s: size, r: rand() * Math.PI * 2, v: rand() < 0.5 ? 0 : 1, lean: (rand() - 0.5) * 0.06 })
+      trees.push({ x: px, y, z: pz, h, s: h / 10, r: treeRand() * Math.PI * 2, v, lean: (treeRand() - 0.5) * 0.05 })
     }
   }
 
@@ -69,7 +102,8 @@ function scatter(sampler) {
     const y = sampler.height(px, pz)
     if (y > 200 + fbm(nT, px / 90, pz / 90, 2) * 40) continue // tree line
     if (fbm(nT, px / 70, pz / 70, 3) < -0.05) continue
-    farTrees.push({ x: px, y, z: pz, s: 0.9 + rand() * 0.9, r: rand() * 6.28 })
+    const fs = 0.9 + rand() * 0.9
+    farTrees.push({ x: px, y, z: pz, h: 9 + fs * 8, s: fs, r: rand() * 6.28, v: Math.floor(treeRand() * SPRUCE_VARIANTS) })
   }
 
   // Rocks: trailside stones, slope boulders, ravine rim.
@@ -105,40 +139,20 @@ function scatter(sampler) {
     markers.push({ x, z, y: sampler.height(x, z), r: Math.atan2(p.tx, p.tz) })
   }
 
-  // Groves of the scanned Snow Pine Forest asset (placed in Distant.jsx).
-  const groves = []
-  const grand = mulberry32(77)
-  for (let tries = 0; groves.length < 12 && tries < 2000; tries++) {
-    const x = -90 + grand() * 180
-    const z = -200 + grand() * 400
-    nearestTrail(x, z, t)
-    if (t.d < 11 || t.d > 60) continue
-    if (inClearing(clear, x, z)) continue
-    const ledge = t.s > LEVEL.ledge.s0 - 8 && t.s < LEVEL.ledge.s1 + 8 && t.side > 0
-    if (ledge || streamDistance(x, z) < 10) continue
-    if (groves.some((g) => Math.hypot(g.x - x, g.z - z) < 38)) continue
-    sampler.normal(x, z, n)
-    if (n.y < 0.85) continue
-    const s = 10 + grand() * 4
-    groves.push({ x, z, y: sampler.height(x, z), s, sx: 0.9 + grand() * 0.2, sy: 0.9 + grand() * 0.25, sz: 0.9 + grand() * 0.2, r: grand() * Math.PI * 2 })
-  }
-
-  return { trees, farTrees, rocks, markers, groves }
+  return { trees, farTrees, rocks, markers }
 }
 
 function buildColliders(sampler, sc) {
   const list = []
   for (const t of sc.trees) {
-    list.push({ x: t.x, z: t.z, radius: 0.28 * t.s + 0.12, top: t.y + 50, kind: 'tree', base: t.y, size: t.s })
+    // Trunk collider (Meshy spruce trunks are ~2% of tree height in radius).
+    // `size` = height / 10 feeds the camera's foliage-cone avoidance.
+    list.push({ x: t.x, z: t.z, radius: 0.022 * t.h + 0.12, top: t.y + t.h, kind: 'tree', base: t.y, size: t.h / 10 })
   }
   for (const r of sc.rocks) {
     if (r.s < 0.35) continue
     const h = r.s * (r.hScale ?? 0.62)
     list.push({ x: r.x, z: r.z, radius: r.s * 0.92, top: r.y + h, kind: 'rock' })
-  }
-  for (const g of sc.groves) {
-    // The grove's trunks sit within ~45% of its footprint.
-    list.push({ x: g.x, z: g.z, radius: g.s * 0.45, top: g.y + 60, kind: 'tree' })
   }
   for (const b of SNOWBANKS) {
     list.push({ x: b.x, z: b.z, radius: b.radius, top: sampler.height(b.x, b.z) + b.h, kind: 'snowbank' })

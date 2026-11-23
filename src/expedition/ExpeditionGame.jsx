@@ -6,7 +6,7 @@ import { Terrain } from './scene/Terrain.jsx'
 import { Forest } from './scene/Forest.jsx'
 import { Rocks } from './scene/Rocks.jsx'
 import { Sky, SUN_DIR, FOG_COLOR } from './scene/Sky.jsx'
-import { ForestClusters, MountainMassif } from './scene/Distant.jsx'
+import { MountainMassif } from './scene/Distant.jsx'
 import { Landmarks } from './scene/Landmarks.jsx'
 import { FrostAnomaly, Snowfall } from './scene/Atmosphere.jsx'
 import { Aisha } from './actors/Aisha.jsx'
@@ -69,19 +69,18 @@ function Scene({ world, sim, quality }) {
       <GameLoop world={world} sim={sim} sunRef={sunRef} />
       <Sky />
       {!SKIP.has('terrain') && <Terrain world={world} />}
-      {!SKIP.has('forest') && <Forest world={world} quality={quality} />}
       {!SKIP.has('rocks') && <Rocks world={world} />}
       {!SKIP.has('landmarks') && <Landmarks world={world} />}
       {!SKIP.has('frostanomaly') && <FrostAnomaly world={world} sim={sim} />}
       <Snowfall count={quality === 'low' ? 700 : 1600} paused={phase === 'paused'} />
       <Suspense fallback={null}>
+        {!SKIP.has('forest') && <Forest world={world} quality={quality} />}
         {!SKIP.has('aisha') && <Aisha sim={sim} />}
         {!SKIP.has('wolf') && <Wolf sim={sim} world={world} />}
         <Loaded />
       </Suspense>
       <Suspense fallback={null}>
         {!SKIP.has('massif') && <MountainMassif world={world} />}
-        {!SKIP.has('clusters') && <ForestClusters world={world} range={quality === 'low' ? 80 : 120} />}
       </Suspense>
     </>
   )

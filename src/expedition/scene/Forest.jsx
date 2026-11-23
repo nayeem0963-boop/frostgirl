@@ -1,137 +1,131 @@
-import { useMemo } from 'react'
-import {
-  BufferAttribute, Color, ConeGeometry, CylinderGeometry, InstancedMesh, MeshStandardMaterial,
-  Object3D, Group, DoubleSide,
-} from 'three'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { createNoise2D, mulberry32 } from '../core/noise.js'
+// Alpine forest built from the Meshy spruce scan (alpine-spruces.glb: eight
+// spruces cut from the scan, each in four LODs, one shared material).
+//
+// Trail-side forest: per variant, one InstancedMesh per LOD (0-2). A cheap
+// per-tree distance test (throttled, not every frame) assigns each tree to a
+// LOD. Far trees on the valley walls: static instanced LOD3.
+import { useGLTF } from '@react-three/drei'
+import { useFrame } from '@react-three/fiber'
+import { useMemo, useRef } from 'react'
+import { DoubleSide, Group, InstancedMesh, Object3D, Vector3 } from 'three'
+import { ASSETS } from '../assets.js'
+import { SPRUCE_VARIANTS } from '../world/world.js'
 
-const nTree = createNoise2D(301)
+// Switch distances in metres: [close detail, near].
+const LOD_RANGES = { high: [18, 55], low: [12, 40] }
 
-function colorize(geo, fn) {
-  const p = geo.attributes.position
-  const col = new Float32Array(p.count * 3)
-  const c = new Color()
-  for (let i = 0; i < p.count; i++) {
-    fn(c, p.getX(i), p.getY(i), p.getZ(i), i)
-    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b
-  }
-  geo.setAttribute('color', new BufferAttribute(col, 3))
-  return geo
-}
-
-const BARK = new Color('#43352b')
-const NEEDLE_DARK = new Color('#142619')
-const NEEDLE = new Color('#1f3d2b')
-const NEEDLE_LIGHT = new Color('#2e573d')
-const SNOW = new Color('#eaf0f6')
-const SNOW_SHADE = new Color('#c2d1e1')
-const _s = new Color()
-
-/** A slender snow-dusted spruce, ~10 m tall, with drooping star-shaped whorls. */
-function createPine(seed, tiers = 13) {
-  const rand = mulberry32(seed)
-  const H = 10
-  const parts = []
-  const trunk = new CylinderGeometry(0.07, 0.24, H * 0.55, 7).translate(0, H * 0.27, 0)
-  parts.push(colorize(trunk, (c) => c.copy(BARK)))
-  const lobes = 6 + (seed % 3)
-  for (let i = 0; i < tiers; i++) {
-    const t = i / (tiers - 1)
-    const radius = (H * 0.2 * Math.pow(1 - t, 1.05) + 0.22) * (0.85 + rand() * 0.3)
-    const height = radius * 0.8 + 0.55
-    const y = H * (0.1 + 0.86 * t)
-    const geo = new ConeGeometry(radius, height, 10, 2, true)
-    const p = geo.attributes.position
-    const ph = rand() * 10
-    for (let v = 0; v < p.count; v++) {
-      const x = p.getX(v)
-      const z = p.getZ(v)
-      const vy = p.getY(v)
-      const ang = Math.atan2(z, x)
-      const rel = Math.hypot(x, z) / radius // 0 at apex .. 1 at rim
-      const star = 1 + 0.32 * Math.max(-0.6, Math.sin(ang * lobes + ph)) * rel + 0.12 * nTree(ang * 2 + ph, i) * rel
-      const droop = -rel * rel * height * 0.42
-      p.setXYZ(v, x * star, vy + droop, z * star)
+function spruceGeometries(scene) {
+  const out = []
+  scene.traverse((o) => {
+    const m = o.isMesh && o.name.match(/spruce(\d+)_lod(\d)/)
+    if (m) {
+      out[m[1]] ??= []
+      out[m[1]][m[2]] = o.geometry
     }
-    geo.computeVertexNormals()
-    const tierSnow = 0.05 + rand() * 0.3 + t * 0.15
-    colorize(geo, (c, x, vy, z, idx) => {
-      const ny = geo.attributes.normal.getY(idx)
-      const rel = Math.hypot(x, z) / radius
-      const n = nTree(x * 1.9 + seed, z * 1.9 + i)
-      c.copy(NEEDLE_DARK).lerp(NEEDLE, 0.55 + n * 0.45).lerp(NEEDLE_LIGHT, Math.max(0, n) * 0.35 + rel * 0.15)
-      // Patchy snow resting on the upper surfaces, thinning toward branch tips.
-      const snow = Math.min(1, Math.max(0, (n + tierSnow - 0.28 - rel * 0.25) * 3)) * (ny > 0.3 ? 1 : 0)
-      if (snow > 0) { _s.copy(SNOW).lerp(SNOW_SHADE, rel * 0.35); c.lerp(_s, snow) }
-    })
-    geo.translate((rand() - 0.5) * 0.12, y, (rand() - 0.5) * 0.12)
-    parts.push(geo)
-  }
-  const tip = new ConeGeometry(0.12, 1.1, 6).translate(0, H * 1.02, 0)
-  parts.push(colorize(tip, (c) => c.copy(NEEDLE)))
-  const merged = mergeGeometries(parts.map((g) => { g.deleteAttribute('uv'); return g }))
-  merged.computeBoundingSphere()
-  return merged
+  })
+  return out
 }
 
-function createFarPine() {
-  const parts = []
-  for (let i = 0; i < 3; i++) {
-    const t = i / 2
-    const r = 2.8 * (1 - t * 0.6)
-    const g = new ConeGeometry(r, r * 1.6, 7).translate(0, 2.2 + i * 2.6, 0)
-    colorize(g, (c, x, y, z, idx) => {
-      const ny = g.attributes.normal.getY(idx)
-      c.copy(NEEDLE).lerp(SNOW, ny > 0.45 ? 0.75 : 0.1)
-    })
-    parts.push(g)
-  }
-  const m = mergeGeometries(parts.map((g) => { g.deleteAttribute('uv'); return g }))
-  m.computeBoundingSphere()
-  return m
-}
-
-const CHUNK = 64
-
-function buildChunks(items, geometries, material, { shadows }) {
-  const groups = new Map()
-  for (const t of items) {
-    const key = `${Math.floor(t.x / CHUNK)},${Math.floor(t.z / CHUNK)},${t.v ?? 0}`
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(t)
-  }
-  const root = new Group()
-  const dummy = new Object3D()
-  for (const [key, list] of groups) {
-    const v = Number(key.split(',')[2])
-    const mesh = new InstancedMesh(geometries[v], material, list.length)
-    list.forEach((t, i) => {
-      dummy.position.set(t.x, t.y - 0.3, t.z)
-      dummy.rotation.set(t.lean ?? 0, t.r, (t.lean ?? 0) * 0.7)
-      const w = t.s * (0.92 + ((i * 7) % 5) * 0.04)
-      dummy.scale.set(w, t.s * 1.08, w)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-    })
-    mesh.instanceMatrix.needsUpdate = true
-    mesh.computeBoundingSphere()
-    mesh.castShadow = shadows
-    mesh.receiveShadow = shadows
-    root.add(mesh)
-  }
-  return root
+function treeMatrix(dummy, t, sink) {
+  dummy.position.set(t.x, t.y - sink, t.z)
+  dummy.rotation.set(t.lean ?? 0, t.r, (t.lean ?? 0) * 0.6)
+  dummy.scale.setScalar(t.h)
+  dummy.updateMatrix()
+  return dummy.matrix.clone()
 }
 
 export function Forest({ world, quality }) {
-  const group = useMemo(() => {
-    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0, side: DoubleSide })
-    const near = buildChunks(world.scatter.trees, [createPine(7), createPine(20, 11)], mat, { shadows: quality !== 'low' })
-    const farMat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })
-    const far = buildChunks(world.scatter.farTrees, [createFarPine()], farMat, { shadows: false })
-    const g = new Group()
-    g.add(near, far)
-    return g
-  }, [world, quality])
-  return <primitive object={group} />
+  const { scene } = useGLTF(ASSETS.spruces)
+  const [r0, r1] = LOD_RANGES[quality] ?? LOD_RANGES.high
+  const state = useRef({ x: Infinity, z: Infinity, fx: 0, fz: 0, t: 0 })
+
+  const forest = useMemo(() => {
+    const geos = spruceGeometries(scene)
+    let material = null
+    scene.traverse((o) => { if (o.isMesh && !material) material = o.material })
+    material = material.clone()
+    material.side = DoubleSide // thin scanned needles: render both faces
+    material.roughness = 0.95
+    material.metalness = 0
+    material.envMapIntensity = 0.55
+    material.color.setScalar(1.18) // the baked scan texture is quite dark
+
+    const group = new Group()
+    const dummy = new Object3D()
+    const variants = Math.min(SPRUCE_VARIANTS, geos.length)
+
+    // Near/mid forest: dynamic LOD split.
+    const byVariant = Array.from({ length: variants }, () => [])
+    for (const t of world.scatter.trees) {
+      byVariant[t.v % variants].push({ x: t.x, z: t.z, h: t.h, m: treeMatrix(dummy, t, 0.25 + t.h * 0.015) })
+    }
+    const near = byVariant.map((list, v) => {
+      const lods = [0, 1, 2].map((l) => {
+        const m = new InstancedMesh(geos[v][l], material, Math.max(1, list.length))
+        m.frustumCulled = false // instances are culled in the LOD pass below
+        m.count = 0
+        m.receiveShadow = true
+        // Only the close LOD casts: its range sits inside the sun's ~40 m
+        // shadow frustum, and the shadow pass then stays cheap.
+        m.castShadow = l === 0 && quality !== 'low'
+        group.add(m)
+        return m
+      })
+      return { list, lods }
+    })
+
+    // Far forest: static LOD3, grouped into angular sectors around the valley
+    // so off-screen sectors are frustum-culled. Two variants keep calls low.
+    const SECTORS = 8
+    const farGroups = new Map()
+    for (const t of world.scatter.farTrees) {
+      const sector = Math.floor(((Math.atan2(t.z, t.x) + Math.PI) / (Math.PI * 2)) * SECTORS) % SECTORS
+      const v = t.v % 2 ? 4 : 0 // one mature + one young silhouette
+      const key = `${sector}:${v}`
+      if (!farGroups.has(key)) farGroups.set(key, { v, list: [] })
+      farGroups.get(key).list.push(t)
+    }
+    for (const { v, list } of farGroups.values()) {
+      const far = new InstancedMesh(geos[v][3], material, list.length)
+      list.forEach((t, i) => far.setMatrixAt(i, treeMatrix(dummy, t, 0.6)))
+      far.computeBoundingSphere()
+      group.add(far)
+    }
+    return { group, near }
+  }, [scene, world, quality])
+
+  // Re-split LODs when the camera moves or turns enough (not every frame).
+  const fwd = useMemo(() => new Vector3(), [])
+  useFrame(({ camera }, dt) => {
+    const s = state.current
+    s.t += dt
+    camera.getWorldDirection(fwd)
+    const cx = camera.position.x
+    const cz = camera.position.z
+    const moved = (cx - s.x) ** 2 + (cz - s.z) ** 2 > 2.25 || fwd.x * s.fx + fwd.z * s.fz < 0.995
+    if (!moved && s.t < 0.5) return
+    s.x = cx; s.z = cz; s.fx = fwd.x; s.fz = fwd.z; s.t = 0
+    const a2 = r0 * r0
+    const b2 = r1 * r1
+    for (const { list, lods } of forest.near) {
+      const n = [0, 0, 0]
+      for (const t of list) {
+        const dx = t.x - cx
+        const dz = t.z - cz
+        const d2 = dx * dx + dz * dz
+        // Skip trees well behind the camera (keep nearby ones for shadows).
+        if (d2 > 1600 && dx * fwd.x + dz * fwd.z < -(t.h * 0.6 + 10)) continue
+        const l = d2 < a2 ? 0 : d2 < b2 ? 1 : 2
+        lods[l].setMatrixAt(n[l]++, t.m)
+      }
+      for (let l = 0; l < 3; l++) {
+        lods[l].count = n[l]
+        lods[l].instanceMatrix.needsUpdate = true
+      }
+    }
+  })
+
+  return <primitive object={forest.group} />
 }
+
+useGLTF.preload(ASSETS.spruces)

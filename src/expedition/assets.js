@@ -5,7 +5,7 @@ export const ASSETS = {
   aisha: `${base}aisha.glb`,
   wolf: `${base}wolf.glb`,
   massif: `${base}mountain-massif.glb`,
-  forest: `${base}snow-pine-forest.glb`,
+  spruces: `${base}alpine-spruces.glb`,
 }
 
 // Clip names baked into aisha.glb by the asset pipeline (verified on export).
