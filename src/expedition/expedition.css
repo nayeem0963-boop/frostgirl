@@ -1,0 +1,104 @@
+/* Frost expedition — every rule is scoped under .frost-root so it cannot
+   affect the original game. */
+.frost-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #c9d6e3;
+  color: #f4f7fb;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  overscroll-behavior: none;
+}
+.frost-root canvas { display: block; touch-action: none; }
+.frost-root button { font: inherit; cursor: pointer; }
+
+.frost-root .fr-vignette,
+.frost-root .fr-hurt {
+  position: absolute; inset: 0; pointer-events: none; transition: opacity 0.3s;
+}
+.frost-root .fr-vignette { background: radial-gradient(ellipse at center, transparent 45%, rgba(120, 200, 255, 0.55) 100%); }
+.frost-root .fr-hurt { background: radial-gradient(ellipse at center, transparent 50%, rgba(170, 20, 20, 0.6) 100%); }
+
+/* HUD */
+.frost-root .fr-hud {
+  position: absolute; inset: 0; pointer-events: none;
+  padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 16px max(16px, env(safe-area-inset-left));
+}
+.frost-root .fr-hud-top { display: flex; align-items: flex-start; gap: 16px; }
+.frost-root .fr-bars { display: grid; gap: 6px; width: min(220px, 38vw); }
+.frost-root .fr-bar { display: grid; grid-template-columns: 58px 1fr; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.frost-root .fr-bar.is-dim { opacity: 0.55; }
+.frost-root .fr-bar-track { height: 7px; border-radius: 4px; background: rgba(10, 22, 40, 0.45); overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15); }
+.frost-root .fr-bar-fill { display: block; height: 100%; transform-origin: left; transition: transform 0.15s linear; }
+.frost-root .fr-bar-fill.is-health { background: linear-gradient(90deg, #e8eef6, #ffffff); }
+.frost-root .fr-bar-fill.is-low { background: linear-gradient(90deg, #ff7b6b, #ffb199); }
+.frost-root .fr-bar-fill.is-stamina { background: linear-gradient(90deg, #7fc4ff, #b5e1ff); }
+.frost-root .fr-progress { margin-left: auto; text-align: right; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.frost-root .fr-alt { font-size: 20px; font-weight: 600; letter-spacing: 0.02em; }
+.frost-root .fr-route { width: min(160px, 30vw); height: 3px; background: rgba(10,22,40,0.4); border-radius: 2px; margin: 4px 0 3px auto; overflow: hidden; }
+.frost-root .fr-route span { display: block; height: 100%; background: #ffd28a; }
+.frost-root .fr-route-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.85; }
+.frost-root .fr-icon-btn {
+  pointer-events: auto; width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(12, 26, 46, 0.4); color: #fff; font-size: 12px; backdrop-filter: blur(6px);
+}
+.frost-root .fr-hint, .frost-root .fr-warning {
+  position: absolute; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px)); padding: 9px 16px; border-radius: 999px; font-size: 14px; text-align: center;
+  background: rgba(12, 26, 46, 0.5); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.18);
+}
+.frost-root .fr-warning { background: rgba(110, 30, 20, 0.62); border-color: rgba(255,160,130,0.5); font-weight: 600; animation: fr-pulse 1s ease-in-out infinite alternate; }
+@keyframes fr-pulse { from { box-shadow: 0 0 0 rgba(255,90,60,0); } to { box-shadow: 0 0 22px rgba(255,90,60,0.55); } }
+
+/* Screens */
+.frost-root .fr-screen {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: linear-gradient(180deg, rgba(10, 24, 44, 0.15), rgba(10, 24, 44, 0.55));
+}
+.frost-root .fr-screen.is-menu { place-items: center start; padding-left: max(16px, 7vw); background: linear-gradient(90deg, rgba(8, 20, 38, 0.72), rgba(8, 20, 38, 0.1) 70%); }
+.frost-root .fr-screen.is-fail { background: rgba(30, 12, 16, 0.5); }
+.frost-root .fr-card {
+  width: min(420px, 100%); display: grid; gap: 12px; padding: 26px 24px; border-radius: 18px;
+  background: rgba(14, 28, 50, 0.62); border: 1px solid rgba(255,255,255,0.16); backdrop-filter: blur(14px);
+  box-shadow: 0 20px 60px rgba(0, 10, 30, 0.35);
+}
+.frost-root .fr-title-card { background: transparent; border: none; box-shadow: none; backdrop-filter: none; padding: 0; width: min(460px, 100%); }
+.frost-root .fr-kicker { margin: 0; font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; color: #ffd28a; }
+.frost-root .fr-title { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: clamp(56px, 12vw, 104px); letter-spacing: 0.18em; line-height: 1; text-shadow: 0 4px 30px rgba(0, 20, 50, 0.5); }
+.frost-root h2 { margin: 0; font-family: Georgia, serif; font-weight: 400; font-size: 30px; }
+.frost-root .fr-sub { margin: 0; line-height: 1.5; color: #d9e4f0; font-size: 15px; }
+.frost-root .fr-btn {
+  padding: 13px 18px; border-radius: 12px; border: none; font-weight: 600; font-size: 15px; letter-spacing: 0.04em;
+  background: linear-gradient(180deg, #ffffff, #dde8f4); color: #102747;
+}
+.frost-root .fr-btn:disabled { opacity: 0.6; cursor: progress; }
+.frost-root .fr-btn.is-ghost { background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); }
+.frost-root .fr-btn:focus-visible, .frost-root .fr-link:focus-visible { outline: 2px solid #ffd28a; outline-offset: 2px; }
+.frost-root .fr-link { color: #cfe0f2; font-size: 13px; text-decoration: none; opacity: 0.85; }
+.frost-root .fr-link:hover { opacity: 1; text-decoration: underline; }
+.frost-root .fr-controls { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #c7d5e5; }
+.frost-root kbd { font-family: inherit; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); margin-right: 3px; }
+.frost-root .fr-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0; }
+.frost-root .fr-stats div { padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.08); }
+.frost-root .fr-stats dt { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #b8c9dc; }
+.frost-root .fr-stats dd { margin: 2px 0 0; font-size: 20px; font-weight: 600; }
+
+/* Touch */
+.frost-root .fr-touch { position: absolute; inset: 0; }
+.frost-root .fr-stick { position: absolute; width: 104px; height: 104px; margin: -52px 0 0 -52px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.35); background: rgba(12,26,46,0.22); pointer-events: none; }
+.frost-root .fr-knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255,255,255,0.7); }
+.frost-root .fr-stick-hint { position: absolute; left: max(22px, env(safe-area-inset-left)); bottom: max(26px, env(safe-area-inset-bottom)); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.6; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.frost-root .fr-tbtns { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: max(76px, calc(env(safe-area-inset-bottom) + 60px)); display: flex; gap: 12px; align-items: flex-end; }
+.frost-root .fr-tbtn { width: 64px; height: 64px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.4); background: rgba(12,26,46,0.38); color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; backdrop-filter: blur(6px); touch-action: none; }
+.frost-root .fr-tbtn.is-jump { width: 74px; height: 74px; }
+.frost-root .fr-tbtn.is-sprint { width: 54px; height: 54px; font-size: 11px; }
+.frost-root .fr-tbtn.is-on { background: rgba(127,196,255,0.55); }
+
+@media (max-width: 600px) {
+  .frost-root .fr-screen.is-menu { place-items: end center; padding: 16px 16px max(24px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, rgba(8,20,38,0.05) 30%, rgba(8,20,38,0.8)); }
+  .frost-root .fr-alt { font-size: 16px; }
+  .frost-root .fr-hint, .frost-root .fr-warning { bottom: auto; top: 76px; font-size: 13px; }
+}

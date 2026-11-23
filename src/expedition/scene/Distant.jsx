@@ -1,0 +1,84 @@
+import { useGLTF } from '@react-three/drei'
+import { useFrame } from '@react-three/fiber'
+import { useMemo } from 'react'
+import { Box3, Color, Vector3 } from 'three'
+import { ASSETS } from '../assets.js'
+
+const HAZE = new Color('#c3d2e2')
+
+/** Aerial perspective for objects beyond the fog range. */
+function applyHaze(material, amount) {
+  material.fog = false
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uHaze = { value: HAZE }
+    shader.uniforms.uHazeAmount = { value: amount }
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', 'uniform vec3 uHaze;\nuniform float uHazeAmount;\nvoid main() {')
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, uHaze, uHazeAmount);')
+  }
+  material.needsUpdate = true
+}
+
+/** The Frost Mountain Massif: the summit landmark on the northern horizon. */
+export function MountainMassif({ world }) {
+  const { scene } = useGLTF(ASSETS.massif)
+  const object = useMemo(() => {
+    const root = scene.clone(true)
+    root.traverse((o) => {
+      if (o.isMesh) {
+        o.material = o.material.clone()
+        o.material.envMapIntensity = 0.5
+        applyHaze(o.material, 0.32)
+        o.castShadow = false
+        o.receiveShadow = false
+      }
+    })
+    const scale = 2900
+    root.scale.setScalar(scale)
+    root.rotation.y = Math.PI / 2
+    root.updateMatrixWorld(true)
+    const box = new Box3().setFromObject(root)
+    const z = -2700
+    const groundY = world.height(0, z)
+    root.position.set(-box.getCenter(new Vector3()).x, groundY - box.min.y - 260, z - box.getCenter(new Vector3()).z)
+    return root
+  }, [scene, world])
+  return <primitive object={object} />
+}
+
+/**
+ * The scanned Snow Pine Forest GLB is a small grove (~5 spruces). It is
+ * placed as varied groves along the valley sides, between the procedural trees.
+ */
+export function ForestClusters({ world, range = 120 }) {
+  const { scene } = useGLTF(ASSETS.forest)
+  const group = useMemo(() => {
+    scene.traverse((o) => {
+      if (o.isMesh) {
+        o.material.envMapIntensity = 0.5
+        o.material.roughness = 1
+        // Groves are midground set dressing: receive shadows, don't cast (perf).
+        o.castShadow = false
+        o.receiveShadow = true
+      }
+    })
+    return world.scatter.groves.map((g) => {
+      const c = scene.clone(true)
+      c.scale.set(g.s * g.sx, g.s * g.sy, g.s * g.sz)
+      c.rotation.y = g.r
+      // Grove spans y -0.7..0.7 in model units: sit the trunks in the snow.
+      c.position.set(g.x, g.y + c.scale.y * 0.66, g.z)
+      return c
+    })
+  }, [scene, world])
+  // Distance cull: each grove is ~60k triangles, only draw the nearby ones.
+  useFrame(({ camera }) => {
+    for (const g of group) {
+      g.visible = (g.position.x - camera.position.x) ** 2 + (g.position.z - camera.position.z) ** 2 < range * range
+    }
+  })
+  return group.map((g, i) => <primitive key={i} object={g} />)
+}
+
+useGLTF.preload(ASSETS.massif)
+useGLTF.preload(ASSETS.forest)

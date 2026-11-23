@@ -148,3 +148,11 @@ and opacity, and adds an instanced energy core and halo with rotation, hover and
 pulse. The original source GLB
 is unchanged; if it fails to load, the game reports the error and uses the
 previous diamond collectible.
+
+## Frost (second game)
+
+The project now hosts two independent games behind a selection screen at `/`:
+the original runner above (`/?game=original`) and **Frost — The Frozen
+Trail**, a third-person 3D mountain expedition (`/?game=frost`). See
+[docs/FROST.md](docs/FROST.md) for controls, architecture, the asset pipeline
+and the asset inventory.
