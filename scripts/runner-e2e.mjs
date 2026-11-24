@@ -227,14 +227,14 @@ async function phone(viewport, tag) {
   await sleep(900)
   await place(page, 'wall', 1, 40); await sleep(200)
   await page.screenshot({ path: `${out}/${tag}-obstacle.png` })
-  await sleep(3500)
+  for (let i = 0; i < 2400 && (await sim(page)).phase === 'running'; i++) await realSleep(25) // the wall is ~5 s of game time away
   s = await sim(page); check(`[${tag}] collision ends the run`, s.phase === 'gameover')
   await page.waitForSelector('[data-screen="gameover"] .runner-btn', { timeout: 20000 })
   await sleep(300)
   await page.screenshot({ path: `${out}/${tag}-gameover.png` })
-  const pb = await page.locator('[data-screen="gameover"]').boundingBox()
-  const ab = await S(page, () => { const c = document.querySelector('canvas').getBoundingClientRect(); return { h: c.height, w: c.width } })
-  check(`[${tag}] game-over panel leaves the lower scene visible`, tag.includes('portrait') ? pb.height < ab.h * 0.62 : pb.width < ab.w * 0.5, `panel ${Math.round(pb.width)}x${Math.round(pb.height)} of ${ab.w}x${ab.h}`)
+  // the overlay element is full-screen by design (its lower part is transparent): measure where its CONTENT ends
+  const lay = await S(page, () => { const r = document.querySelector('[data-screen="gameover"]'); const kids = [...r.children].filter((k) => getComputedStyle(k).display !== 'none'); const last = kids[kids.length - 1].getBoundingClientRect(); const wide = Math.max(...kids.map((k) => k.getBoundingClientRect().right)); const c = document.querySelector('canvas').getBoundingClientRect(); return { bottom: last.bottom, right: wide, h: c.height, w: c.width } })
+  check(`[${tag}] game-over panel leaves the lower scene visible`, tag.includes('portrait') ? lay.bottom < lay.h * 0.62 : lay.right < lay.w * 0.5, `content ends at y ${Math.round(lay.bottom)}/${lay.h}, x ${Math.round(lay.right)}/${lay.w}`)
   await page.locator('[data-screen="gameover"] .runner-btn').tap(); await sleep(600)
   s = await sim(page); check(`[${tag}] tap Restart`, s.phase === 'running')
   check(`[${tag}] no page errors`, errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
