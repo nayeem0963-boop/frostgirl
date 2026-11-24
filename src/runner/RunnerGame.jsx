@@ -155,7 +155,7 @@ function Scene({ sim, quality, onPhase, onScore, debug }) {
       <HitBurst sim={sim} />
       <Snowfall count={quality === 'low' ? 500 : 1100} paused={false} />
       <Suspense fallback={null}>
-        <RunnerForest sim={sim} />
+        <RunnerForest sim={sim} quality={quality} />
         <RunnerAisha sim={sim} debug={debug} />
         <Ready />
       </Suspense>
