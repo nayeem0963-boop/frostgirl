@@ -154,8 +154,12 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   s = await sim(page)
   check('collision with ice wall ends the run', s.phase === 'gameover')
   // restart is locked briefly so a mashed key cannot skip the impact (pressed straight away, before any slow screenshot)
-  await page.keyboard.press('Enter')
-  check('restart is ignored in the first moments after impact (no accidental restart)', (await sim(page)).phase === 'gameover')
+  // (dispatched inside the page in the very frame the hit is seen: a real key press through the slow software renderer can arrive after the lock expires)
+  const lockHeld = await S(page, () => new Promise((res) => {
+    const tick = () => { if (window.__frostRunner.sim.phase !== 'gameover') return requestAnimationFrame(tick); window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', bubbles: true })); res(window.__frostRunner.sim.phase === 'gameover') }
+    tick()
+  }))
+  check('restart is ignored in the first moments after impact (no accidental restart)', lockHeld)
   const over0 = await S(page, () => ({ dist: Math.floor(window.__frostRunner.sim.dist) }))
   await page.screenshot({ path: `${out}/08a-impact.png` })
   await page.waitForSelector('[data-screen="gameover"]', { timeout: 20000 })
