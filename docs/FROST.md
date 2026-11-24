@@ -1,3 +1,55 @@
+# Frost — Phase 2: gameplay feel (runner)
+
+Targeted refinements of the Phase 1 runner; same architecture, assets and controls.
+
+**Animation (measured, not guessed).** The rig was sampled in a browser: the `run` clip's stance foot moves at about
+4.0 m/s at 1x (0.63 s cycle, ~2.5 m per cycle); `sprint` is ~2 m/s and unusable; `slide` drifts 1.3 m forward and 0.24 m
+sideways. Run speed is now 7.5 -> 12.5 m/s (was 11 -> 22) and the run clip plays at `speed / 4.0` (1.88x at the start, capped
+at 2.5x, `runRate` in `sim.js`), so the feet keep pace with the ground up to 10 m/s; at 12.5 m/s about 20% slip remains
+(`footSlip`). The jump pose is scrubbed by the physics (`sim.airP`, 0..1), so it always matches the arc; landing plays the
+recovery of the same export. Duck holds the crouch pose (clip `land` 0.26-0.34 s, head top measured 1.18 m); the collider is
+1.2 m and the arch bottom is 1.4 m, so the visual and the collision agree.
+
+**Feel.** Lane glide is ease-out (0.14 s, no overshoot) with one buffered change that expires after 0.2 s; Aisha leans and
+turns slightly into lane changes. Jumps are buffered (a press up to 0.12 s before touch-down fires on landing), gravity is
+heavier on the way down (38 up / 46 down), there is never a double jump. A duck cannot end while an arch is overhead.
+
+**Obstacle generator** (`sim/patterns.js`). Weighted patterns (single wall, double wall, slalom pair, wall+ridge, arch+wall,
+double-wall zigzag) unlocked by difficulty over 150 s; gaps tighten from 2.0 s to 1.25 s. Every row is checked against the
+previous one: worst-case lane shifts from any lane the player can be in must fit in `0.45 s + 0.24 s per lane`, jump/duck
+rows get 1.1-1.15 s of recovery, no row walls all three lanes, no row signature repeats three times, no action kind three
+times. Ground chevrons (amber up = jump, blue down = duck) mark ridge and arch 8 m before them; every obstacle has a soft
+footprint shadow. A bot that plays only through `command()` survives 150 s + 30 s on 12 seeds (`tests/runner.test.js`).
+
+**Camera.** Closer than Phase 1 on every screen (5.6 m back on desktop/landscape, up to 8.6 m on tall portrait) with the
+vertical follow damped to 30% of the jump height. `cameraFor` guarantees Aisha is on screen in every lane and the outer lane
+edges are visible 14 m ahead at any aspect ratio (unit-tested for 7 aspect ratios).
+
+**Game over.** Aisha is knocked back and crouches (no slide clip), a 40-point ice burst and a 0.2 s camera shake play, the
+world stays where the impact happened, and after 0.6 s a panel shows the final distance at the top of the screen (left
+column in short landscape) so Aisha and the obstacle stay visible. Restart is locked for those 0.6 s.
+
+**Measurements** (`npm run build`, `scripts/runner-perf.mjs`, headless Chromium with a *software* GL renderer: draw calls,
+triangles and JS cost are real; frame times are not representative and were not used):
+
+| | draw calls | triangles / frame |
+| --- | --- | --- |
+| Desktop 1534x630 | 23 | 337k (pines ~205k, Aisha 48k, mountain 83k) |
+| Phone portrait 390x844 (tighter LODs) | 22 | 270k (pines ~138k) |
+| Phase 1 build, before culling trees behind the camera | 23 | 435k |
+
+JS cost of the sim + camera step: 0.015-0.04 ms per frame; JS heap flat (36 MB over 8 s). No shadow maps are used.
+Not measured: real GPU/phone frame rates.
+
+**Tests.** `npm test` (all suites) and `npm run test:e2e` against `vite preview` (56 browser checks: keyboard, swipes, lanes,
+jump/landing, duck, each obstacle, game over, restart, desktop 1534x630, phone portrait and landscape).
+
+**Known issues.** The run clip still slips ~20% above 10 m/s; the duck is a held pose rather than an animation; the
+game-over reaction is a held crouch plus lean (no stumble clip); real-device performance is untested; some pine crowns
+show scan artefacts up close (as in the expedition).
+
+---
+
 # Frost — Phase 1: the three-lane runner (`?game=frost`)
 
 `/?game=frost` now opens the **runner**: Aisha runs a snowy mountain trail on three lanes. The earlier third-person
