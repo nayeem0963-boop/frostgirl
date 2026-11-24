@@ -21,7 +21,7 @@ export const AISHA_STATES = {
   celebrate: { clip: 'celebrate', loop: true, fade: 0.4 },
 }
 
-function subclip(clip, name, [a, b], noLift) {
+export function subclip(clip, name, [a, b], noLift) {
   const fps = 30
   const out = AnimationUtils.subclip(clip, name, Math.round(a * fps), Math.round(b * fps), fps)
   if (noLift) {

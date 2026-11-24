@@ -5,6 +5,7 @@ import './launcher.css'
 
 const OriginalGame = lazy(() => import('../App.jsx'))
 const FrostGame = lazy(() => import('../expedition/ExpeditionGame.jsx'))
+const FrostRunner = lazy(() => import('../runner/RunnerGame.jsx'))
 // Dev-only asset viewer; compiled out of production builds.
 const ClipViewer = import.meta.env.DEV ? lazy(() => import('../expedition/dev/ClipViewer.jsx')) : null
 
@@ -27,9 +28,9 @@ function GameSelect() {
           <span>Race through the Frozen Kingdom, dodge obstacles and collect orbs.</span>
         </a>
         <a className="launcher-card is-frost" href="?game=frost">
-          <span className="launcher-tag">3D expedition · new</span>
+          <span className="launcher-tag">3D runner · new</span>
           <strong>Frost</strong>
-          <span>Guide Aisha up a vast frozen mountain trail — wildlife, ice and something stranger.</span>
+          <span>Run the snowy trail with Aisha: switch lanes, jump and duck past the ice.</span>
         </a>
       </div>
     </main>
@@ -42,6 +43,8 @@ export default function Launcher() {
   if (game === 'frost' && import.meta.env.DEV && new URLSearchParams(window.location.search).has('viewer')) {
     return <Suspense fallback={<Loading />}><ClipViewer /></Suspense>
   }
-  if (game === 'frost') return <Suspense fallback={<Loading />}><FrostGame /></Suspense>
+  // ?game=frost is the runner (Phase 1); the earlier third-person expedition is kept at ?game=frost&mode=expedition
+  if (game === 'frost' && new URLSearchParams(window.location.search).get('mode') === 'expedition') return <Suspense fallback={<Loading />}><FrostGame /></Suspense>
+  if (game === 'frost') return <Suspense fallback={<Loading />}><FrostRunner /></Suspense>
   return <GameSelect />
 }

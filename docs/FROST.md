@@ -1,3 +1,41 @@
+# Frost — Phase 1: the three-lane runner (`?game=frost`)
+
+`/?game=frost` now opens the **runner**: Aisha runs a snowy mountain trail on three lanes. The earlier third-person
+expedition is untouched and still available at `/?game=frost&mode=expedition` (the rest of this file describes it).
+
+| Action | Desktop | Touch |
+| --- | --- | --- |
+| Start / restart | Enter, Space or R on a menu screen, or the button | Tap the button |
+| Move lane | ← → / A D | Swipe left / right |
+| Jump | ↑ / W / Space | Swipe up |
+| Duck | ↓ / S | Swipe down (Down in the air = fast fall) |
+| Pause | Esc / P (also pauses when the tab is hidden) | Pause button |
+
+Obstacles (each has its own collision box in `src/runner/config.js`, independent of its mesh):
+ice wall (one lane, full height: change lanes), fallen pine (all lanes, 0.8 m: jump), ice arch with icicles
+(all lanes, bottom at 1.05 m: duck). Hit one and the run ends; Restart starts a fresh run.
+
+| Area | Files |
+| --- | --- |
+| Tuning | `src/runner/config.js` |
+| Pure simulation (state machine, physics, spawner, collision) | `src/runner/sim/sim.js` |
+| Input (keys, swipes) and camera maths | `src/runner/sim/input.js`, `src/runner/sim/camera.js` |
+| Scene | `src/runner/scene/` (`Ground`, `RunnerForest`, `Obstacles`, `RunnerAisha`, `scenery.js`) |
+| Screens / wiring | `src/runner/RunnerGame.jsx`, `runner.css` |
+
+Reused from the expedition: `aisha.glb` (run, jump/land export, crouch pose), `alpine-spruces.glb` (decorative pines,
+placed only beyond `TREE_MIN_X`, never on or over the lanes), `mountain-massif.glb`, the sky and the snowfall.
+
+Tests: `npm test` (`tests/runner.test.js`: lanes, jump, duck, every collision, restart, spawner fairness, swipes, camera
+fit, tree placement) and `npm run build && npx vite preview --port 4173` then `npm run test:e2e` (real browser, keyboard and
+touch, desktop 1534x630, phone portrait and landscape; needs Playwright and a browser). `?debug` exposes `window.__frostRunner`.
+
+Known limitations (Phase 1): no dedicated duck/slide animation (the crouch pose of the jump export is held, with a lean);
+the run clip's foot speed is not matched to the ground speed; there are no sounds, orbs or rewards; only one world; pines
+are never used as hazards (the fallen pine is a procedural log); the snowy ground is flat with a banked shoulder.
+
+---
+
 # Frost — The Frozen Trail (first playable)
 
 Frost is a second, independent game in this project: a third-person 3D

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node --test",
+    "test:e2e": "node scripts/runner-e2e.mjs http://127.0.0.1:4173",
     "preview": "vite preview"
   },
   "dependencies": {
