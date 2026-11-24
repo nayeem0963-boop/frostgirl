@@ -34,6 +34,7 @@ export function RunnerForest({ sim }) {
     material.color.setScalar(1.18) // the baked scan is dark
 
     const group = new Group()
+    group.name = 'forest'
     const meshes = {}
     const total = SLOTS_PER_SIDE * 2
     for (const v of VARIANTS) {

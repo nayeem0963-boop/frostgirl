@@ -45,10 +45,10 @@ const S = (page, fn, arg) => page.evaluate(fn, arg)
 const sim = (page) => S(page, () => { const s = window.__frostRunner.sim; return { phase: s.phase, x: s.x, y: s.y, lane: s.lane, anim: s.anim, dist: s.dist, speed: s.speed, grounded: s.grounded, duck: s.duck } })
 const count = (page, k) => S(page, (k) => window.__frostRunner.sim.count[k] ?? 0, k)
 // In-page trigger: fires `cmd` on the first animation frame where the obstacle is closer than `at` metres (frame-accurate even when slow).
-const actAt = (page, kind, cmd, at) => S(page, ([kind, cmd, at]) => new Promise((res) => {
-  const tick = () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === kind); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= at) { window.__frostRunner.command(cmd); return res(true) } requestAnimationFrame(tick) }
+const actAt = (page, kind, cmd, secs) => S(page, ([kind, cmd, secs]) => new Promise((res) => {
+  const tick = () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === kind); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= secs * s.speed) { window.__frostRunner.command(cmd); return res(true) } requestAnimationFrame(tick) }
   tick()
-}), [kind, cmd, at])
+}), [kind, cmd, secs])
 // Remove generated obstacles so lane/jump/duck tests are not interrupted, then place one on demand.
 const clear = (page) => S(page, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; s.nextSpawn = 1e9 })
 const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
@@ -72,6 +72,9 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   let s = await sim(page)
   check('Enter starts the run', s.phase === 'running' && s.dist > 1, `dist ${s.dist.toFixed(1)}`)
   check('running animation selected', s.anim === 'run')
+  const rr = await S(page, () => ({ rate: window.__frostRunner.debug.runRate, speed: window.__frostRunner.sim.speed }))
+  check('run animation rate follows ground speed (no foot sliding)', Math.abs(rr.rate - Math.min(2.5, Math.max(1, rr.speed / 4))) < 0.02, `rate ${rr.rate?.toFixed(2)} at ${rr.speed.toFixed(1)} m/s`)
+  const cam0 = await S(page, () => window.__frostRunner.debug.camera.position.y)
   await clear(page)
   await page.screenshot({ path: `${out}/02-running.png` })
 
@@ -103,8 +106,11 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   await page.keyboard.press('Space')
   await sleep(150)
   s = await sim(page); check('jump leaves the ground (Space)', s.y > 0.2 && !s.grounded, `y ${s.y.toFixed(2)}`)
-  check('jump animation', ['jump', 'fall'].includes(s.anim), s.anim)
+  check('jump pose is driven by the jump arc', s.anim === 'air', s.anim)
+  const air = await S(page, () => ({ pose: window.__frostRunner.debug.pose, cy: window.__frostRunner.debug.camera.position.y, ay: window.__frostRunner.debug.pos[1] }))
+  check('Aisha is rendered at her physics height while jumping (no floating/sinking)', Math.abs(air.ay - s.y) < 0.35, `rendered ${air.ay.toFixed(2)} vs sim ${s.y.toFixed(2)}`)
   await page.screenshot({ path: `${out}/05-jump.png` })
+  check('camera stays calm in a jump (rises < 0.6 m)', Math.abs(air.cy - cam0) < 0.6, `dy ${(air.cy - cam0).toFixed(2)}`)
   await sleep(700)
   s = await sim(page); check('landing returns to ground and running', s.grounded && s.y === 0 && ['land', 'run'].includes(s.anim), s.anim)
   await sleep(400)
@@ -134,10 +140,10 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
 
   // jump over ridge, duck under arch (command fired at the right distance, frame-accurate)
   await place(page, 'ridge', 1, 30)
-  await actAt(page, 'ridge', 'jump', 5.0); await sleep(2200)
+  await actAt(page, 'ridge', 'jump', 0.28); await sleep(2200)
   s = await sim(page); check('jump clears the fallen pine', s.phase === 'running', s.phase)
   await place(page, 'arch', 1, 30)
-  await actAt(page, 'arch', 'duck', 5.5); await sleep(2200)
+  await actAt(page, 'arch', 'duck', 0.3); await sleep(2200)
   s = await sim(page); check('duck passes under the ice arch', s.phase === 'running', s.phase)
 
   // collision: drive into a wall
@@ -147,13 +153,26 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   await sleep(2500)
   s = await sim(page)
   check('collision with ice wall ends the run', s.phase === 'gameover')
+  await page.screenshot({ path: `${out}/08a-impact.png` })
+  const over0 = await S(page, () => ({ knock: window.__frostRunner.sim.knock, z: window.__frostRunner.debug.pos[2], dist: Math.floor(window.__frostRunner.sim.dist) }))
+  // restart is locked briefly so a mashed key cannot skip the impact
+  await page.keyboard.press('Enter')
+  check('restart is ignored in the first moments after impact (no accidental restart)', (await sim(page)).phase === 'gameover')
+  await page.waitForSelector('[data-screen="gameover"]', { timeout: 20000 })
   check('game-over screen shown', await page.locator('[data-screen="gameover"]').isVisible())
+  const shown = await page.locator('.runner-final').innerText()
+  check('final distance displayed', Number.parseInt(shown, 10) === over0.dist || Math.abs(Number.parseInt(shown, 10) - over0.dist) <= 1, `shows "${shown.replace(/\s+/g, ' ')}" for ${over0.dist} m`)
+  const kz = await S(page, () => ({ z: window.__frostRunner.debug.pos[2], knock: window.__frostRunner.sim.knock }))
+  check('Aisha is knocked back and stays in the scene', kz.knock > 0.9 && kz.z > 0.5 && kz.z < 2.5, `knock z ${kz.z.toFixed(2)}`)
+  const panel = await page.locator('[data-screen="gameover"]').boundingBox()
+  void panel
   await page.screenshot({ path: `${out}/08-game-over.png` })
   const d1 = s.dist
   await sleep(500)
-  check('world stops after collision', (await sim(page)).dist - d1 < 1.5)
+  check('world stays where the collision happened', Math.abs((await sim(page)).dist - d1) < 0.5)
   await page.keyboard.press('KeyA') // input after game over must not move anything
   await sleep(300)
+  check('no input after game over', (await sim(page)).lane === lane)
 
   // restart
   await page.keyboard.press('Enter')
@@ -161,10 +180,13 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   s = await sim(page)
   check('restart works (Enter)', s.phase === 'running' && s.dist > 1 && s.dist < 30, `dist ${s.dist.toFixed(1)}`)
   check('restart resets lane', s.lane === 1)
+  const rs = await S(page, () => { const q = window.__frostRunner.sim; return { knock: q.knock, hitT: q.hitT, duck: q.duck, y: q.y, hit: q.hit } })
+  check('restart resets the simulation state', rs.knock === 0 && rs.hitT === 0 && rs.y === 0 && rs.hit === null)
   await page.screenshot({ path: `${out}/09-restarted.png` })
   await clear(page)
   // restart via button
   await place(page, 'wall', 1, 12); await sleep(1800)
+  await page.waitForSelector('[data-screen="gameover"] .runner-btn')
   await page.locator('[data-screen="gameover"] .runner-btn').click()
   await sleep(600)
   s = await sim(page); check('restart works (button)', s.phase === 'running')
@@ -206,8 +228,12 @@ async function phone(viewport, tag) {
   await page.screenshot({ path: `${out}/${tag}-obstacle.png` })
   await sleep(3500)
   s = await sim(page); check(`[${tag}] collision ends the run`, s.phase === 'gameover')
+  await page.waitForSelector('[data-screen="gameover"] .runner-btn', { timeout: 20000 })
+  await sleep(300)
   await page.screenshot({ path: `${out}/${tag}-gameover.png` })
-  await sleep(600)
+  const pb = await page.locator('[data-screen="gameover"]').boundingBox()
+  const ab = await S(page, () => { const c = document.querySelector('canvas').getBoundingClientRect(); return { h: c.height, w: c.width } })
+  check(`[${tag}] game-over panel leaves the lower scene visible`, tag.includes('portrait') ? pb.height < ab.h * 0.62 : pb.width < ab.w * 0.5, `panel ${Math.round(pb.width)}x${Math.round(pb.height)} of ${ab.w}x${ab.h}`)
   await page.locator('[data-screen="gameover"] .runner-btn').tap(); await sleep(600)
   s = await sim(page); check(`[${tag}] tap Restart`, s.phase === 'running')
   check(`[${tag}] no page errors`, errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
@@ -220,6 +246,7 @@ await phone({ width: 844, height: 390 }, 'phone-landscape')
 {
   const { ctx, page } = await open({ width: 1534, height: 630 })
   await page.keyboard.press('Enter'); await sleep(300); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
+  await page.waitForSelector('[data-screen="gameover"] .runner-btn', { timeout: 20000 })
   const box = await page.locator('[data-screen="gameover"] .runner-btn').boundingBox()
   check('Restart button inside viewport at 1534x630', !!box && box.y >= 0 && box.y + box.height <= 630)
   await ctx.close()

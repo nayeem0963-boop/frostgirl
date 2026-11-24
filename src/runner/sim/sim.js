@@ -1,9 +1,11 @@
 // Pure runner simulation (no React / three): state machine, player physics,
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
-import { LANES, PLAYER, RUN, OBSTACLES } from '../config.js'
+import { LANES, PLAYER, RUN, OBSTACLES, ANIM } from '../config.js'
+import { nextPattern, sig } from './patterns.js'
 
 export const STEP = 1 / 120
 export const POOL = 24
+export const DIFFICULTY_SECONDS = 150 // run time until the generator is at full difficulty
 
 export function mulberry32(a) {
   return () => {
@@ -14,6 +16,11 @@ export function mulberry32(a) {
   }
 }
 
+/** Run-clip playback rate for a ground speed: the stance foot keeps pace with the ground. */
+export const runRate = (speed) => Math.min(ANIM.maxRate, Math.max(ANIM.minRate, speed / ANIM.strideSpeed))
+/** Fraction of the ground speed the feet do NOT cover at that playback rate (0 = no sliding). */
+export const footSlip = (speed) => Math.max(0, 1 - (runRate(speed) * ANIM.strideSpeed) / speed)
+
 /** Queue an event for the renderer and count it (counters survive for tests / stats). */
 function emit(sim, name) {
   sim.events.push(name)
@@ -21,7 +28,7 @@ function emit(sim, name) {
 }
 
 export function createSim(seed = 1) {
-  const sim = {
+  return {
     phase: 'ready', // ready | running | gameover
     paused: false,
     seed,
@@ -30,20 +37,24 @@ export function createSim(seed = 1) {
     dist: 0,
     speed: 0,
     lane: 1, // target lane index
-    queued: null, // one buffered lane change (-1 / +1)
-    x: 0, laneFrom: 0, laneT: 1,
+    queued: null, // one buffered lane change {dir, ttl}
+    x: 0, vx: 0, laneFrom: 0, laneT: 1,
     y: 0, vy: 0, grounded: true,
-    duck: 0, // seconds of duck left
-    landFlash: 0,
+    airT: 0, airTotal: 0, airP: 0, // jump progress 0..1 (drives the jump pose)
+    jumpBuf: 0,
+    duck: 0, // seconds of duck left (collider is low while > 0)
+    duckT: 0, // 0..1 eased, for the pose / lean only
+    landT: 0,
     anim: 'idle',
-    nextSpawn: 0, lastLane: 1, lastKind: '', patternCount: 0,
+    gen: { n: 0, history: [], lastRow: null, lastPos: 0 },
     hit: null, // the obstacle that ended the run
+    hitT: 0, // seconds since the hit
+    knock: 0, // 0..1 eased knock-back after a hit (visual)
     count: {}, // lifetime event counters: jump, duck, lane, land, hit, start
-    events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start' (drained by the renderer)
+    events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start'
     obstacles: Array.from({ length: POOL }, () => ({ active: false, kind: 'wall', x: 0, dist: 0, id: 0 })),
     nextId: 1,
   }
-  return sim
 }
 
 export function startRun(sim, seed = sim.seed + 1) {
@@ -51,12 +62,15 @@ export function startRun(sim, seed = sim.seed + 1) {
   sim.rand = mulberry32(seed)
   Object.assign(sim, {
     phase: 'running', paused: false, time: 0, dist: 0, speed: RUN.startSpeed,
-    lane: 1, queued: null, x: 0, laneFrom: 0, laneT: 1, y: 0, vy: 0, grounded: true, duck: 0, landFlash: 0,
-    anim: 'run', hit: null, lastLane: 1, lastKind: '', patternCount: 0,
-    nextSpawn: RUN.startSpeed * RUN.safeSeconds + 22,
+    lane: 1, queued: null, x: 0, vx: 0, laneFrom: 0, laneT: 1, y: 0, vy: 0, grounded: true,
+    airT: 0, airTotal: 0, airP: 0, jumpBuf: 0, duck: 0, duckT: 0, landT: 0,
+    anim: 'run', hit: null, hitT: 0, knock: 0, acc: 0,
+    gen: { n: 0, history: [], lastRow: null, lastPos: RUN.startSpeed * RUN.safeSeconds },
   })
   for (const o of sim.obstacles) o.active = false
+  sim.events.length = 0
   emit(sim, 'start')
+  fillObstacles(sim)
 }
 
 export function resetToReady(sim) {
@@ -72,7 +86,7 @@ export function command(sim, cmd) {
   if (sim.phase !== 'running' || sim.paused) return false
   if (cmd === 'left' || cmd === 'right') {
     const dir = cmd === 'left' ? -1 : 1
-    if (sim.laneT < 0.55) { sim.queued = dir; return false } // mid-glide: buffer ONE change, no spamming
+    if (sim.laneT < 0.5) { sim.queued = { dir, ttl: PLAYER.queueTime }; return false } // mid-glide: buffer ONE change
     const next = sim.lane + dir
     if (next < 0 || next > 2) return false
     sim.laneFrom = sim.x
@@ -83,11 +97,8 @@ export function command(sim, cmd) {
     return true
   }
   if (cmd === 'jump') {
-    if (!sim.grounded) return false
-    sim.vy = PLAYER.jumpVelocity
-    sim.grounded = false
-    sim.duck = 0
-    emit(sim, 'jump')
+    if (!sim.grounded) { if (sim.vy < 0) sim.jumpBuf = PLAYER.jumpBuffer; return false } // buffered; never a double jump
+    launch(sim)
     return true
   }
   if (cmd === 'duck') {
@@ -100,12 +111,22 @@ export function command(sim, cmd) {
   return false
 }
 
+function launch(sim) {
+  sim.vy = PLAYER.jumpVelocity
+  sim.grounded = false
+  sim.duck = 0
+  sim.airT = 0
+  const apex = (PLAYER.jumpVelocity ** 2) / (2 * PLAYER.gravityUp)
+  sim.airTotal = PLAYER.jumpVelocity / PLAYER.gravityUp + Math.sqrt((2 * apex) / PLAYER.gravityDown)
+  emit(sim, 'jump')
+}
+
 // ---- collision geometry ------------------------------------------------------
-export function playerBox(sim, out = {}) {
+export function playerBox(sim, out = {}, ducked = sim.duck > 0 && sim.grounded) {
   out.x0 = sim.x - PLAYER.halfWidth; out.x1 = sim.x + PLAYER.halfWidth
   out.z0 = -PLAYER.halfDepth; out.z1 = PLAYER.halfDepth
   out.y0 = sim.y
-  out.y1 = sim.y + (sim.duck > 0 && sim.grounded ? PLAYER.duckHeight : PLAYER.standHeight)
+  out.y1 = sim.y + (ducked ? PLAYER.duckHeight : PLAYER.standHeight)
   return out
 }
 
@@ -120,79 +141,94 @@ export function obstacleBox(o, out = {}) {
 const pb = {}
 const ob = {}
 /** Swept in z: the obstacle moved from prevAhead to ahead (distance in front of the runner) this step. */
-function hits(sim, o, prevAhead, ahead) {
-  playerBox(sim, pb)
+function hits(sim, o, prevAhead, ahead, ducked) {
+  playerBox(sim, pb, ducked)
   obstacleBox(o, ob)
   if (pb.x1 <= ob.x0 || pb.x0 >= ob.x1) return false
   if (pb.y1 <= ob.y0 || pb.y0 >= ob.y1) return false
-  // obstacle z-range over the step vs the player's z-range [-halfDepth, halfDepth] (obstacle ahead = -z)
+  // obstacle z-range over the step vs the player's z-range [-halfDepth, halfDepth] (ahead is measured toward -z)
   const lo = Math.min(ahead, prevAhead) + ob.dz0
   const hi = Math.max(ahead, prevAhead) + ob.dz1
-  return hi > -pb.z1 && lo < -pb.z0 // ahead is measured toward -z
+  return hi > -pb.z1 && lo < -pb.z0
+}
+
+/** Would standing up right now put her head into an obstacle? (keeps her crouched under an arch) */
+function standBlocked(sim) {
+  for (const o of sim.obstacles) {
+    if (!o.active) continue
+    if (hits(sim, o, o.dist - sim.dist, o.dist - sim.dist, false)) return true
+  }
+  return false
 }
 
 // ---- spawner -----------------------------------------------------------------
-function acquire(sim) {
-  return sim.obstacles.find((o) => !o.active) ?? null
+const difficulty = (sim) => Math.min(1, sim.time / DIFFICULTY_SECONDS)
+const speedAt = (sim, pos) => Math.min(RUN.maxSpeed, sim.speed + (RUN.accel * Math.max(0, pos - sim.dist)) / Math.max(sim.speed, 1))
+
+function place(sim, row, at) {
+  const slots = row.kind === 'wall' ? row.lanes : [1]
+  for (const lane of slots) {
+    const o = sim.obstacles.find((q) => !q.active)
+    if (!o) return
+    o.active = true; o.kind = row.kind; o.id = sim.nextId++
+    o.x = row.kind === 'wall' ? LANES[lane] : 0
+    o.dist = at
+    o.row = sim.gen.n
+  }
 }
 
-function spawnPattern(sim) {
-  const r = sim.rand
-  const n = sim.patternCount++
-  const speed = sim.speed
-  const reaction = Math.max(1.15, 1.7 - n * 0.02) // seconds between obstacle rows
-  const at = sim.nextSpawn
-  const place = (kind, lane) => {
-    const o = acquire(sim)
-    if (!o) return
-    o.active = true; o.kind = kind; o.id = sim.nextId++
-    o.x = kind === 'wall' ? LANES[lane] : 0
-    o.dist = at
+function fillObstacles(sim) {
+  const g = sim.gen
+  while (g.lastPos - sim.dist < RUN.spawnAhead) {
+    const rows = nextPattern(g, sim.rand, difficulty(sim))
+    for (const { row, gap } of rows) {
+      g.lastPos += gap * speedAt(sim, g.lastPos)
+      place(sim, row, g.lastPos)
+      g.history.push(sig(row)); if (g.history.length > 8) g.history.shift()
+      g.lastRow = row
+      g.n++
+    }
   }
-  // First rows are gentle: single walls that leave the other lanes open.
-  let kind
-  const roll = r()
-  if (n < 2) kind = 'wall'
-  else if (roll < 0.5) kind = 'wall'
-  else if (roll < 0.75) kind = sim.lastKind === 'ridge' ? 'wall' : 'ridge'
-  else kind = sim.lastKind === 'arch' ? 'wall' : 'arch'
-  if (kind === 'wall') {
-    // one or (later) two walls; always leave at least one lane open
-    const open = Math.floor(r() * 3)
-    const lanes = [0, 1, 2].filter((l) => l !== open)
-    const count = n > 5 && r() < 0.35 ? 2 : 1
-    const pick = count === 2 ? lanes : [lanes[Math.floor(r() * lanes.length)]]
-    for (const l of pick) place('wall', l)
-  } else {
-    place(kind, 1)
-  }
-  sim.lastKind = kind
-  sim.nextSpawn = at + speed * reaction + 4
 }
 
 // ---- stepping ----------------------------------------------------------------
+const easeOut = (t) => 1 - (1 - t) * (1 - t) * (1 - t)
+
 function stepPlayer(sim, dt) {
-  // lane glide (smoothstep), queued change when finished enough
+  // lane glide: ease-out cubic (responsive start, settles with no overshoot)
+  const prevX = sim.x
   if (sim.laneT < 1) {
     sim.laneT = Math.min(1, sim.laneT + dt / PLAYER.laneTime)
-    const k = sim.laneT * sim.laneT * (3 - 2 * sim.laneT)
-    sim.x = sim.laneFrom + (LANES[sim.lane] - sim.laneFrom) * k
+    sim.x = sim.laneFrom + (LANES[sim.lane] - sim.laneFrom) * easeOut(sim.laneT)
   } else {
     sim.x = LANES[sim.lane]
   }
-  if (sim.queued && sim.laneT >= 0.55) { const q = sim.queued; sim.queued = null; command(sim, q < 0 ? 'left' : 'right') }
+  sim.vx = (sim.x - prevX) / dt
+  if (sim.queued) {
+    sim.queued.ttl -= dt
+    if (sim.queued.ttl <= 0) sim.queued = null
+    else if (sim.laneT >= 0.5) { const q = sim.queued.dir; sim.queued = null; command(sim, q < 0 ? 'left' : 'right') }
+  }
   // vertical
   if (!sim.grounded) {
-    sim.vy -= PLAYER.gravity * dt
+    sim.vy -= (sim.vy > 0 ? PLAYER.gravityUp : PLAYER.gravityDown) * dt
     sim.y += sim.vy * dt
+    sim.airT += dt
+    sim.airP = Math.min(1, sim.airT / sim.airTotal)
     if (sim.y <= 0) {
-      sim.y = 0; sim.vy = 0; sim.grounded = true; sim.landFlash = 0.22
+      sim.y = 0; sim.vy = 0; sim.grounded = true; sim.airP = 0; sim.landT = PLAYER.landTime
       emit(sim, 'land')
+      if (sim.jumpBuf > 0) { sim.jumpBuf = 0; launch(sim) }
     }
   }
-  if (sim.duck > 0) sim.duck = Math.max(0, sim.duck - dt)
-  if (sim.landFlash > 0) sim.landFlash = Math.max(0, sim.landFlash - dt)
-  sim.anim = !sim.grounded ? (sim.vy > 2 ? 'jump' : 'fall') : sim.landFlash > 0 ? 'land' : sim.duck > 0 ? 'duck' : 'run'
+  if (sim.jumpBuf > 0) sim.jumpBuf = Math.max(0, sim.jumpBuf - dt)
+  if (sim.duck > 0) {
+    sim.duck = Math.max(0, sim.duck - dt)
+    if (sim.duck === 0 && standBlocked(sim)) sim.duck = 0.04 // never stand up into an arch
+  }
+  sim.duckT += ((sim.duck > 0 && sim.grounded ? 1 : 0) - sim.duckT) * Math.min(1, dt * (sim.duck > 0 ? 24 : 14))
+  if (sim.landT > 0) sim.landT = Math.max(0, sim.landT - dt)
+  sim.anim = !sim.grounded ? 'air' : sim.duck > 0 ? 'duck' : sim.landT > 0 ? 'land' : 'run'
 }
 
 function stepOnce(sim, dt) {
@@ -201,16 +237,16 @@ function stepOnce(sim, dt) {
   const move = sim.speed * dt
   sim.dist += move
   stepPlayer(sim, dt)
-  // spawn
-  while (sim.nextSpawn - sim.dist < RUN.spawnAhead) spawnPattern(sim)
-  // move + collide
+  fillObstacles(sim)
+  const ducked = sim.duck > 0 && sim.grounded
   for (const o of sim.obstacles) {
     if (!o.active) continue
     const prev = o.dist - (sim.dist - move)
     const ahead = o.dist - sim.dist
     if (ahead < -RUN.despawnBehind) { o.active = false; continue }
-    if (hits(sim, o, prev, ahead)) {
+    if (hits(sim, o, prev, ahead, ducked)) {
       sim.phase = 'gameover'; sim.anim = 'hurt'; sim.hit = { id: o.id, kind: o.kind, x: o.x, dist: o.dist }
+      sim.hitT = 0; sim.vx = 0
       emit(sim, 'hit')
       return
     }
@@ -224,7 +260,12 @@ export function update(sim, dt) {
     sim.acc = (sim.acc ?? 0) + Math.min(dt, 0.05)
     while (sim.acc >= STEP && sim.phase === 'running') { stepOnce(sim, STEP); sim.acc -= STEP }
   } else if (sim.phase === 'gameover') {
-    sim.speed = Math.max(0, sim.speed - 40 * dt)
+    // the world stays where the collision happened; Aisha is knocked back (visual) and the speed readout winds down
+    const d = Math.min(dt, 0.05)
+    sim.hitT += d
+    sim.knock = easeOut(Math.min(1, sim.hitT / 0.4))
+    sim.speed = Math.max(0, sim.speed - 60 * d)
+    if (!sim.grounded) { sim.vy -= PLAYER.gravityDown * d; sim.y = Math.max(0, sim.y + sim.vy * d); if (sim.y === 0) { sim.grounded = true; sim.vy = 0 } }
   }
 }
 

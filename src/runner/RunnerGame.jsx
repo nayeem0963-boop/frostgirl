@@ -1,9 +1,9 @@
 // Frost — Phase 1: three-lane snowy-trail runner with Aisha.
 // Sim (sim/sim.js) is pure and fixed-step; this file wires it to the scene,
 // camera, input and screens.
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ACESFilmicToneMapping, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
+import { ACESFilmicToneMapping, PointsMaterial, BufferAttribute, BufferGeometry, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
 import { Sky, FOG_COLOR } from '../expedition/scene/Sky.jsx'
 import { MountainMassif } from '../expedition/scene/Distant.jsx'
 import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
@@ -11,11 +11,13 @@ import { Ground } from './scene/Ground.jsx'
 import { RunnerForest } from './scene/RunnerForest.jsx'
 import { Obstacles } from './scene/Obstacles.jsx'
 import { RunnerAisha } from './scene/RunnerAisha.jsx'
-import { createSim, startRun, resetToReady, update, command } from './sim/sim.js'
+import { createSim, startRun, resetToReady, update, command, aheadOf } from './sim/sim.js'
 import { attachInput } from './sim/input.js'
 import { cameraFor, cameraTarget } from './sim/camera.js'
 import './runner.css'
 
+const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+const OVER_DELAY = 600 // ms between the impact and the game-over panel / restart being available
 const FLAT_WORLD = { height: () => 0 } // MountainMassif only needs a ground height
 const SUN = new Vector3(-0.42, 0.36, 0.83).normalize()
 
@@ -55,18 +57,23 @@ function Shadow({ sim }) {
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
 function Loop({ sim, onPhase, onScore, debug }) {
+  const gl = useThree((st) => st.gl)
+  const scene = useThree((st) => st.scene)
+  const cam = useThree((st) => st.camera)
+  useEffect(() => { if (debug) { debug.gl = gl; debug.scene = scene; debug.camera = cam } }, [gl, scene, cam, debug])
   const last = useRef({ phase: '', score: -1, paused: false })
-  const pos = useRef(new Vector3(0, 2.75, 5.8))
-  const look = useRef(new Vector3(0, 1.1, -14))
+  const pos = useRef(new Vector3(0, 2.7, 5.6))
+  const look = useRef(new Vector3(0, 0.6, -9))
   const tgt = useMemo(() => ({}), [])
   const first = useRef(true)
 
   useFrame(({ camera, size }, rawDt) => {
     const s = sim.current
     const dt = Math.min(rawDt, 0.05)
+    const t0 = debug ? performance.now() : 0
     update(s, rawDt)
     s.events.length = 0 // nothing consumes frame events yet; keep the queue from growing
-    if (debug) debug.frames = (debug.frames ?? 0) + 1
+    if (debug) { debug.frames = (debug.frames ?? 0) + 1; const ms = performance.now() - t0; debug.simMs = (debug.simMs ?? ms) * 0.95 + ms * 0.05 }
 
     const rig = cameraFor(size.width / size.height)
     if (camera.fov !== rig.fov) { camera.fov = rig.fov; camera.updateProjectionMatrix() }
@@ -80,6 +87,12 @@ function Loop({ sim, onPhase, onScore, debug }) {
     look.current.y += (tgt.ly - look.current.y) * k
     look.current.z = tgt.lz
     camera.position.copy(pos.current)
+    // a very short, small shake on impact (skipped for reduced motion)
+    if (s.phase === 'gameover' && s.hitT < 0.22 && !REDUCED_MOTION) {
+      const a = 0.07 * (1 - s.hitT / 0.22)
+      camera.position.x += Math.sin(s.hitT * 120) * a
+      camera.position.y += Math.cos(s.hitT * 97) * a * 0.7
+    }
     camera.lookAt(look.current)
 
     const l = last.current
@@ -88,6 +101,42 @@ function Loop({ sim, onPhase, onScore, debug }) {
     if (score !== l.score && (score - l.score >= 1 || score === 0)) { l.score = score; onScore(score) }
   })
   return null
+}
+
+
+/** A short burst of ice/snow shards from the point of impact. 40 pooled points, only alive for ~0.8 s after a hit. */
+const SHARDS = 40
+function HitBurst({ sim }) {
+  const { geo, vel, mat } = useMemo(() => {
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new BufferAttribute(new Float32Array(SHARDS * 3), 3))
+    const vel = new Float32Array(SHARDS * 3)
+    const mat = new PointsMaterial({ size: 0.2, color: '#e6f6ff', transparent: true, opacity: 0, depthWrite: false })
+    return { geo, vel, mat }
+  }, [])
+  const armed = useRef(false)
+  useFrame(() => {
+    const s = sim.current
+    const p = geo.attributes.position.array
+    if (s.phase !== 'gameover' || !s.hit) { armed.current = false; mat.opacity = 0; return }
+    if (!armed.current) {
+      armed.current = true
+      const z = -aheadOf(s, s.hit)
+      for (let i = 0; i < SHARDS; i++) {
+        p[i * 3] = s.x + (Math.random() - 0.5) * 0.8; p[i * 3 + 1] = 0.4 + Math.random() * 1.2; p[i * 3 + 2] = z + 0.4
+        vel[i * 3] = (Math.random() - 0.5) * 6; vel[i * 3 + 1] = 2 + Math.random() * 4; vel[i * 3 + 2] = 1 + Math.random() * 4
+      }
+    }
+    const t = s.hitT
+    const dt = 1 / 60
+    for (let i = 0; i < SHARDS; i++) {
+      vel[i * 3 + 1] -= 14 * dt
+      p[i * 3] += vel[i * 3] * dt; p[i * 3 + 1] = Math.max(0.02, p[i * 3 + 1] + vel[i * 3 + 1] * dt); p[i * 3 + 2] += vel[i * 3 + 2] * dt
+    }
+    geo.attributes.position.needsUpdate = true
+    mat.opacity = Math.max(0, 1 - t / 0.9)
+  })
+  return <points geometry={geo} material={mat} frustumCulled={false} />
 }
 
 function Scene({ sim, quality, onPhase, onScore, debug }) {
@@ -103,10 +152,11 @@ function Scene({ sim, quality, onPhase, onScore, debug }) {
       <Ground sim={sim} />
       <Obstacles sim={sim} />
       <Shadow sim={sim} />
+      <HitBurst sim={sim} />
       <Snowfall count={quality === 'low' ? 500 : 1100} paused={false} />
       <Suspense fallback={null}>
         <RunnerForest sim={sim} />
-        <RunnerAisha sim={sim} />
+        <RunnerAisha sim={sim} debug={debug} />
         <Ready />
       </Suspense>
       <Suspense fallback={null}>
@@ -134,13 +184,15 @@ export default function RunnerGame() {
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
   const hitAt = useRef(0)
+  const [showOver, setShowOver] = useState(false)
+  const overTimer = useRef(0)
 
   useEffect(() => { readyCb = () => setLoaded(true); return () => { readyCb = () => {} } }, [])
 
   const start = useCallback(() => {
     const s = sim.current
     if (s.phase === 'running') return
-    if (s.phase === 'gameover' && performance.now() - hitAt.current < 450) return // no accidental instant restart
+    if (s.phase === 'gameover' && performance.now() - hitAt.current < OVER_DELAY) return // no accidental instant restart (the panel is not up yet)
     startRun(s, (Math.random() * 1e9) | 0)
     setScore(0)
   }, [])
@@ -151,11 +203,16 @@ export default function RunnerGame() {
 
   const onPhase = useCallback((p, pz) => {
     setPhase(p); setPaused(pz)
+    clearTimeout(overTimer.current)
     if (p === 'gameover') {
       hitAt.current = performance.now()
+      overTimer.current = setTimeout(() => setShowOver(true), OVER_DELAY) // let the impact play out before the panel
       setScore((sc) => { setBest((b) => { const nb = Math.max(b, sc); try { localStorage.setItem('frost-runner-best', String(nb)) } catch { /* private mode */ } return nb }); return sc })
+    } else {
+      setShowOver(false)
     }
   }, [])
+  useEffect(() => () => clearTimeout(overTimer.current), [])
 
   useEffect(() => {
     const el = root.current
@@ -188,7 +245,7 @@ export default function RunnerGame() {
     <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded}>
       <Canvas
         dpr={quality === 'low' ? [1, 1.5] : [1, 2]}
-        camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.75, 5.8] }}
+        camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
       >
         <Scene sim={sim} quality={quality} onPhase={onPhase} onScore={setScore} debug={debug} />
@@ -222,11 +279,14 @@ export default function RunnerGame() {
         </div>
       )}
 
-      {phase === 'gameover' && (
-        <div className="runner-screen" data-screen="gameover">
+      {phase === 'gameover' && <div className="runner-flash" aria-hidden="true" />}
+      {phase === 'gameover' && showOver && (
+        <div className="runner-screen runner-over" data-screen="gameover">
           <h2>You hit the ice</h2>
-          <p className="runner-tag">{score} m{best > 0 && score >= best ? ' · new best!' : ''}</p>
-          <button className="runner-btn" onClick={start}>Restart</button>
+          <p className="runner-label">Distance</p>
+          <p className="runner-final">{score}<small> m</small></p>
+          <p className="runner-tag">{best > 0 && score >= best ? 'New best!' : `Best ${best} m`}</p>
+          <button className="runner-btn" onClick={start} autoFocus>Restart</button>
           <p className="runner-hint">Enter · Space · R</p>
         </div>
       )}

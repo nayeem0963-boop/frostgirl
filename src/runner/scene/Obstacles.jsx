@@ -4,10 +4,10 @@ import { useFrame } from '@react-three/fiber'
 import { useMemo } from 'react'
 import {
   BoxGeometry, BufferAttribute, Color, ConeGeometry, CylinderGeometry, InstancedMesh, MeshStandardMaterial,
-  Object3D, SphereGeometry,
+  Object3D, SphereGeometry, PlaneGeometry, CanvasTexture, MeshBasicMaterial, SRGBColorSpace, DoubleSide,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { OBSTACLES } from '../config.js'
+import { LANES, OBSTACLES } from '../config.js'
 import { POOL } from '../sim/sim.js'
 
 const _o = new Object3D()
@@ -68,8 +68,39 @@ function iceArch() {
   return mergeGeometries(parts)
 }
 
+// Ground telegraphs: amber chevrons pointing up = jump, blue chevrons pointing down = duck, laid in every lane 8 m before the obstacle.
+function chevronTexture(up, color) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128
+  const g = c.getContext('2d')
+  g.lineWidth = 15; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = color
+  for (let i = 0; i < 3; i++) { // one chevron stack per lane
+    const cx = 64 + i * 64
+    for (const dy of [0, 34]) {
+      g.beginPath()
+      if (up) { g.moveTo(cx - 24, 44 + dy); g.lineTo(cx, 18 + dy); g.lineTo(cx + 24, 44 + dy) }
+      else { g.moveTo(cx - 24, 18 + dy); g.lineTo(cx, 44 + dy); g.lineTo(cx + 24, 18 + dy) }
+      g.stroke()
+    }
+  }
+  const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace
+  return t
+}
+
+function softTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64
+  const g = c.getContext('2d')
+  const gr = g.createRadialGradient(32, 32, 4, 32, 32, 31)
+  gr.addColorStop(0, 'rgba(20,40,80,0.7)'); gr.addColorStop(1, 'rgba(20,40,80,0)')
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64)
+  const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace
+  return t
+}
+
+const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9] } // footprint under each obstacle
+const MARK_AHEAD = 8
+
 export function Obstacles({ sim }) {
-  const { group, meshes } = useMemo(() => {
+  const { group, meshes, marks, shadow } = useMemo(() => {
     const mat = new MeshStandardMaterial({
       vertexColors: true, roughness: 0.22, metalness: 0.05, flatShading: true,
       emissive: new Color('#2f78b8'), emissiveIntensity: 0.5,
@@ -84,20 +115,48 @@ export function Obstacles({ sim }) {
       group.add(m)
       meshes[k] = m
     }
-    return { group, meshes }
+    const flat = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
+    const markMat = (map) => new MeshBasicMaterial({ map, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, side: DoubleSide })
+    const marks = {
+      ridge: new InstancedMesh(flat, markMat(chevronTexture(true, '#ff9d1c')), POOL),
+      arch: new InstancedMesh(flat, markMat(chevronTexture(false, '#1f78d1')), POOL),
+    }
+    const shadow = new InstancedMesh(flat, markMat(softTexture()), POOL)
+    for (const m of [...Object.values(marks), shadow]) { m.frustumCulled = false; m.count = 0; m.renderOrder = 1; group.add(m) }
+    return { group, meshes, marks, shadow }
   }, [])
   const tmp = useMemo(() => new Object3D(), [])
   useFrame(() => {
     const s = sim.current
     const n = { wall: 0, ridge: 0, arch: 0 }
+    let sh = 0
+    const span = LANES[2] * 2 + 2.2
     for (const o of s.obstacles) {
       if (!o.active) continue
-      tmp.position.set(o.x, 0, -(o.dist - s.dist))
+      const z = -(o.dist - s.dist)
+      tmp.position.set(o.x, 0, z)
+      tmp.scale.set(1, 1, 1)
       tmp.updateMatrix()
       meshes[o.kind].setMatrixAt(n[o.kind]++, tmp.matrix)
+      const [w, d] = SHADOW[o.kind]
+      tmp.position.set(o.x, 0.03, z)
+      tmp.scale.set(w, 1, d)
+      tmp.updateMatrix()
+      shadow.setMatrixAt(sh++, tmp.matrix)
     }
     for (const k in meshes) { meshes[k].count = n[k]; meshes[k].instanceMatrix.needsUpdate = true }
+    shadow.count = sh; shadow.instanceMatrix.needsUpdate = true
+    let mr = 0, ma = 0
+    for (const o of s.obstacles) {
+      if (!o.active || o.kind === 'wall') continue
+      tmp.position.set(0, 0.035, -(o.dist - s.dist) - MARK_AHEAD)
+      tmp.scale.set(span, 1, 2.6)
+      tmp.updateMatrix()
+      if (o.kind === 'ridge') marks.ridge.setMatrixAt(mr++, tmp.matrix)
+      else marks.arch.setMatrixAt(ma++, tmp.matrix)
+    }
+    marks.ridge.count = mr; marks.ridge.instanceMatrix.needsUpdate = true
+    marks.arch.count = ma; marks.arch.instanceMatrix.needsUpdate = true
   })
   return <primitive object={group} />
 }
-
