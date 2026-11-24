@@ -50,7 +50,7 @@ const actAt = (page, kind, cmd, secs) => S(page, ([kind, cmd, secs]) => new Prom
   tick()
 }), [kind, cmd, secs])
 // Remove generated obstacles so lane/jump/duck tests are not interrupted, then place one on demand.
-const clear = (page) => S(page, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; s.nextSpawn = 1e9 })
+const clear = (page) => S(page, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; s.gen.lastPos = 1e9 })
 const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   const s = window.__frostRunner.sim
   const o = s.obstacles.find((x) => !x.active)
