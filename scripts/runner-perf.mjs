@@ -26,20 +26,24 @@ async function measure(name, viewport, mobile) {
   await keepBusy()
   const stats = await page.evaluate(async () => {
     const d = window.__frostRunner.debug
-    const count = (filter) => {
-      d.gl.info.autoReset = false; d.gl.info.reset()
+    d.gl.info.autoReset = false
+    const hide = (filter) => {
       const hidden = []
       d.scene.traverse((o) => { if (filter(o) && o.visible) { o.visible = false; hidden.push(o) } })
-      return { hidden, off: () => hidden.forEach((o) => { o.visible = true }) }
+      return () => hidden.forEach((o) => { o.visible = true })
     }
-    const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const frames = (n) => new Promise((r) => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f) })
+    // averages over 6 rendered frames: counters are reset first and divided by the number of renders (info.render.frame)
     const read = async (label, filter) => {
-      let h = { off() {} }
-      if (filter) h = count(filter)
-      d.gl.info.reset(); await frame(); await frame()
+      const restore = filter ? hide(filter) : () => {}
+      await frames(2)
       const i = d.gl.info
-      const r = { label, calls: Math.round(i.render.calls / 2), triangles: Math.round(i.render.triangles / 2), points: Math.round(i.render.points / 2) }
-      h.off(); d.gl.info.autoReset = true
+      i.reset()
+      const f0 = i.render.frame
+      await frames(6)
+      const n = Math.max(1, i.render.frame - f0)
+      const r = { label, calls: Math.round(i.render.calls / n), triangles: Math.round(i.render.triangles / n), points: Math.round(i.render.points / n), n }
+      restore()
       return r
     }
     const out = []
@@ -47,6 +51,8 @@ async function measure(name, viewport, mobile) {
     out.push(await read('without pines', (o) => o.name === 'forest'))
     out.push(await read('without snowfall', (o) => o.isPoints))
     out.push(await read('without Aisha', (o) => o.isSkinnedMesh))
+    out.push(await read('only Aisha', (o) => (o.isMesh || o.isPoints || o.isInstancedMesh) && !o.isSkinnedMesh))
+    d.gl.info.autoReset = true
     const i = d.gl.info
     return { out, geometries: i.memory.geometries, textures: i.memory.textures, simMs: d.simMs, heap: performance.memory?.usedJSHeapSize }
   })
