@@ -18,7 +18,7 @@ async function measure(name, viewport, mobile) {
   await page.keyboard.press('Enter')
   const gt = async (sec) => { const t0 = await page.evaluate(() => window.__frostRunner.sim.time); const end = Date.now() + 120000; while (Date.now() < end) { const t = await page.evaluate(() => { const s = window.__frostRunner.sim; if (s.phase !== 'running') throw new Error('run ended during measurement'); return s.time }); if (t - t0 >= sec) return; await sleep(25) } }
   // park Aisha in the right lane and keep walls (left lane only), a fallen pine and an arch coming so the obstacle meshes are on screen
-  const keepBusy = () => page.evaluate(() => { const s = window.__frostRunner.sim; for (const o of s.obstacles) if (o.active && o.kind !== 'wall') o.active = false; s.gen.lastPos = s.dist + 500
+  const keepBusy = () => page.evaluate(() => { const s = window.__frostRunner.sim; for (const o of s.obstacles) if (o.active && (o.kind !== 'wall' || o.x !== -2.2)) o.active = false; s.gen.lastPos = s.dist + 500
     const live = s.obstacles.filter((o) => o.active).length; if (live < 6) for (let i = 0; i < 6 - live; i++) { const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'wall', x: -2.2, dist: s.dist + 25 + i * 14, id: 5000 + Math.random() }) } })
   await page.evaluate(() => { window.__frostRunner.command('right'); })
   await keepBusy()
