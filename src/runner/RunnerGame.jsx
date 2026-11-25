@@ -3,7 +3,7 @@
 // camera, input and screens.
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ACESFilmicToneMapping, PointsMaterial, BufferAttribute, BufferGeometry, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
+import { ACESFilmicToneMapping, Color, PointsMaterial, BufferAttribute, BufferGeometry, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
 import { Sky } from '../expedition/scene/Sky.jsx'
 import { MountainMassif } from '../expedition/scene/Distant.jsx'
 import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
@@ -11,6 +11,7 @@ import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
 import { FinishGate } from './scene/FinishGate.jsx'
 import { Wolves } from './scene/Wolves.jsx'
+import { fogAt } from './sim/mist.js'
 import { pickWorld, unlockAllRequested } from './worlds.js'
 import { loadProgress, saveProgress, recordRun, nextWorldId, describeWorlds } from './progress.js'
 import { worldIds } from '../worlds/runnerThemes.js'
@@ -151,6 +152,20 @@ function HitBurst({ sim }) {
   return <points geometry={geo} material={mat} frustumCulled={false} />
 }
 
+/** World 05: the fog closes in and takes a lilac tint while a bank of dream mist passes (sim.mist, see sim/mist.js). */
+function MistFog({ sim, theme }) {
+  const colors = useMemo(() => ({ base: new Color(theme.fog.color), mist: new Color(theme.mist.color ?? theme.fog.color) }), [theme])
+  useFrame(({ scene }) => {
+    const t = sim.current.mist
+    const r = fogAt(t, theme.fog, theme.mist)
+    if (!scene.fog) return
+    scene.fog.near = r.near; scene.fog.far = r.far
+    scene.fog.color.copy(colors.base).lerp(colors.mist, t * 0.7)
+    if (scene.background?.isColor) scene.background.copy(scene.fog.color)
+  })
+  return null
+}
+
 function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
@@ -161,6 +176,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
       <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
       <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} debug={debug} />
+      {t.mist && <MistFog sim={sim} theme={t} />}
       <Sky colors={t.sky} />
       <Ground sim={sim} theme={t} />
       <Obstacles sim={sim} />
@@ -176,7 +192,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
         <Ready />
       </Suspense>
       <Suspense fallback={null}>
-        {t.backdrop ? <Backdrop url={world.background} crop={t.backdrop.crop} /> : <MountainMassif world={FLAT_WORLD} />}
+        {t.backdrop ? <Backdrop url={world.background} crop={t.backdrop.crop} sim={t.mist ? sim : null} /> : <MountainMassif world={FLAT_WORLD} />}
       </Suspense>
     </>
   )

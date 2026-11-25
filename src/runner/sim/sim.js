@@ -2,6 +2,7 @@
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
 import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD, HOLE } from '../config.js'
 import { starsFor } from '../progress.js'
+import { mistAt, fogAt, visionRange } from './mist.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
 
@@ -59,6 +60,8 @@ export function createSim(seed = 1, world = themeFor('01')) {
     orbs: Array.from({ length: ORBS.pool }, () => ({ active: false, taken: false, takenT: 0, x: 0, y: 0, dist: 0, id: 0 })),
     stars: 0, // set on completion: 1 to 3
     doneT: 0, // seconds since crossing the line
+    mist: 0, // 0..1: how thick the mist is here (World 05); the renderer reads it for the fog
+    vision: 1e9, // how far ahead things can be seen through the fog: the Auto play bot only reacts to what it can see
     orbCount: 0, // orbs collected this run
     orbsSeen: 0, // orbs spawned this run
     auto: false, // Auto play: watch-only, the bot drives (see sim/bot.js)
@@ -81,7 +84,7 @@ export function startRun(sim, seed = sim.seed + 1, { auto = false } = {}) {
   })
   for (const o of sim.obstacles) o.active = false
   for (const o of sim.orbs) { o.active = false; o.taken = false }
-  sim.orbCount = 0; sim.orbsSeen = 0; sim.stars = 0; sim.doneT = 0
+  sim.orbCount = 0; sim.orbsSeen = 0; sim.stars = 0; sim.doneT = 0; sim.mist = 0; sim.vision = 1e9
   sim.events.length = 0
   emit(sim, 'start')
   fillObstacles(sim)
@@ -323,6 +326,10 @@ function stepOnce(sim, dt) {
   const move = sim.speed * dt
   sim.dist += move
   stepPlayer(sim, dt)
+  if (sim.world.mist) { // the mist is a function of the distance run; the fog (and what the bot can see) follows it
+    sim.mist = mistAt(sim.dist, sim.world.mist)
+    sim.vision = visionRange(fogAt(sim.mist, sim.world.fog, sim.world.mist))
+  }
   fillObstacles(sim)
   collectOrbs(sim, move)
   const ducked = sim.duck > 0 && sim.grounded

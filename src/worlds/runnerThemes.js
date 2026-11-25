@@ -20,6 +20,7 @@ const WORLD_1 = {
   trail: { base: '#d3e1f0', speck: [150, 175, 205], spread: [40, 35, 30], shade: [120, 160, 205], divider: [70, 130, 205], rail: [55, 115, 200] },
   backdrop: null,
   hazards: {},
+  mist: null, // World 05: { startAt, period, length, ramp, near, far, color } (see sim/mist.js)
   patternWeights: {},
   finishDistance: 1500,
   difficultySeconds: 150,
@@ -86,6 +87,8 @@ export const runnerThemes = {
     ground: { base: '#fff4f1', speck: [225, 190, 205] },
     trail: { base: '#efd6df', speck: [210, 170, 190], shade: [200, 140, 175], divider: [190, 100, 160], rail: [175, 80, 150] },
     backdrop: { crop: 0.42 },
+    hazards: { mist: true }, // banks of dream mist roll in: the fog closes to 10-50 m, so obstacles show late
+    mist: { startAt: 160, period: 340, length: 130, ramp: 30, near: 10, far: 50, color: '#f7e4ee' }, // banks at 160-290, 500-630 ... 1520-1650 m: the last 150 m before the finish are clear
     patternWeights: { ridge: 1.5, wall1: 1.2 },
     finishDistance: 1800,
   }),
