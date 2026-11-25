@@ -572,6 +572,57 @@ if (want('shard')) {
   await ctx.close()
 }
 
+// ------------------------------------------------------------------ World 04: cracking ice (Phase 5.3)
+if (want('hole')) {
+  const putHole = (page, lane, ahead) => S(page, ([lane, ahead]) => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'hole', lane, side: 0, dist: s.dist + ahead, id: 8000 + Math.random(), x: [-2.2, 0, 2.2][lane] }) }, [lane, ahead])
+  const holeAhead = (page) => S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === 'hole'); return o ? o.dist - s.dist : null })
+  const waitAhead = async (page, at) => { for (let i = 0; i < 6000; i++) { const a = await holeAhead(page); if (a === null || a <= at) return a; await realSleep(8) } return null }
+  const lights = (page) => S(page, () => { let n = 0; window.__frostRunner.debug.scene.traverse((o) => { if (o.isInstancedMesh && o.material.blending === 2) n += o.count }); return n })
+  const { ctx, page, errors } = await open({ width: 960, height: 540 }, false, '&world=04&unlock=all')
+  await page.keyboard.press('Enter'); await sleep(500); await clear(page)
+  await putHole(page, 1, 58)
+  check('a cracking lane shows a column of light from far away', (await lights(page)) >= 1, `${await lights(page)} light columns`)
+  await waitAhead(page, 30)
+  await page.screenshot({ path: `${out}/20-hole-cracking.png` })
+  await waitAhead(page, 19)
+  await sleep(100)
+  check('the ice has broken open by 20 m ahead (the warning is gone)', (await lights(page)) === 0)
+  await page.screenshot({ path: `${out}/21-hole-open.png` })
+  await page.keyboard.press('ArrowLeft'); await sleep(2500)
+  check('switching lanes dodges the hole', (await sim(page)).phase === 'running')
+  // jump over one: the jump trigger fires in the frame where it is 0.25 s away
+  await clear(page); await S(page, () => { const s = window.__frostRunner.sim; s.x = s.x })
+  await putHole(page, (await sim(page)).lane, 40)
+  await S(page, () => new Promise((res) => { const tick = () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === 'hole'); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= s.speed * 0.25) { window.__frostRunner.command('jump'); return res(true) } requestAnimationFrame(tick) }; tick() }))
+  await sleep(250)
+  await page.screenshot({ path: `${out}/22-hole-jump.png` })
+  await sleep(2000)
+  check('a jump at the usual moment clears the hole', (await sim(page)).phase === 'running')
+  // fall in
+  await clear(page); await putHole(page, (await sim(page)).lane, 40)
+  await page.waitForSelector('[data-screen="gameover"]', { timeout: 120000 })
+  check('running into the hole ends the run: "You fell through the ice"', /You fell through the ice/.test(await page.locator('[data-screen="gameover"] h2').innerText()))
+  await page.screenshot({ path: `${out}/23-hole-game-over.png` })
+  check('no page errors (hole)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('hole')) {
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=04&unlock=all')
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  const seen = new Set(); let last = { t: 0, ph: 'running' }
+  for (let i = 0; i < 12000; i++) {
+    last = await S(page, () => { const s = window.__frostRunner.sim; return { t: s.time, ph: s.phase, ids: s.obstacles.filter((o) => o.active && o.kind === 'hole').map((o) => o.id) } })
+    last.ids.forEach((x) => seen.add(x))
+    if (last.t >= 40 || last.ph !== 'running') break
+    await realSleep(60)
+  }
+  check('Auto play survives 40 s of World 04 with holes', last.ph === 'running' && last.t >= 40, `t ${last.t.toFixed(1)} s, ${seen.size} holes met`)
+  check('World 04 really produces holes', seen.size >= 3, `${seen.size}`)
+  check('no page errors (World 04 Auto play)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
 // ------------------------------------------------------------------ phone portrait: swipes
 async function phone(viewport, tag) {
   const { ctx, page, errors } = await open(viewport, true)

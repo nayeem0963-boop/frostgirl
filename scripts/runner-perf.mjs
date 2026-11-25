@@ -81,6 +81,14 @@ async function measure(name, viewport, mobile) {
       await frames(3)
       out.push(await read('everything, shards in view'))
     }
+    if (sm.world.hazards?.hole) { // World 04: a cracking patch far ahead, a hole just opening and an open one, with their decals
+      sm.dist = 0; sm.gen.lastPos = 1e9
+      for (const o of sm.obstacles) o.active = false
+      const put = (lane, ahead, id) => { const o = sm.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'hole', lane, side: 0, dist: sm.dist + ahead, id, x: [-2.2, 0, 2.2][lane] }) }
+      put(0, 14, 9301); put(1, 22, 9302); put(2, 40, 9303)
+      await frames(3)
+      out.push(await read('everything, holes in view'))
+    }
     { const q = window.__frostRunner.sim; q.dist = savedDist; q.phase = 'running'; q.gen.lastPos = q.dist + 20; for (const o of q.obstacles) o.active = false }
     d.gl.info.autoReset = true
     const i = d.gl.info

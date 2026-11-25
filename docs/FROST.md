@@ -1,3 +1,25 @@
+# Frost — Phase 5.3: World 04's cracking ice
+
+**Frozen Ocean** gets holes in the ice, the first hazard you can also *jump*: a lane shows cracks and a faint cyan column of light from
+far away, breaks open into dark water with an icy rim between 24 and 20 m ahead of Aisha (`holeOpen`, `HOLE` in `config.js`: 1.6 s of
+reaction at top speed), and is then a hole she must dodge **or jump**. Running into one ends the run: "You fell through the ice".
+
+- **Collider** (`OBSTACLES.hole`): one lane wide (1.8 m), 1.6 m long, and it only hits a runner whose feet are below 0.25 m, so any jump
+  clears it. Static: it never moves; it is already open when she gets there. The unit tests measure the timing: a jump 0.25 s before it
+  clears it at 7.5, 10 and 12.5 m/s, the window of working jump moments is at least 0.12 s wide at every speed, too early lands in the
+  water and too late runs into it.
+- **Reward**: the generator puts an arc of three orbs at 2.35 m over every hole (all three lanes of a pair), so a jump collects them.
+- **Generator**: holes count as lane blockers for every fairness rule (dodging is always enough, jumping is the extra option); opt-in
+  patterns `hole`, `holeWall`, `holePair`; only World 04 turns them on (`hazards: { hole: true }`). Worlds 01 to 03 are unchanged.
+- **Auto play** always dodges. Fix found on the way: a hole's danger zone reaches 1.08 m behind its centre (a wall's only 0.73 m), and the
+  bot's orb steering considered it passed at 0.9 m, steering back into it. It now keeps every obstacle in view until 1.3 m behind it.
+- **Rendering** (`scene/Obstacles.jsx`): decals on the trail: a crack texture (drawn bigger than the hole) with a light column, then the
+  water patch growing from 55% to 100% while it breaks open. No new asset (all procedural textures); three instanced meshes.
+
+Not done: no ice-crack sound or splash, no ripple animation in the water, Aisha does not visibly fall in (the usual knock-back plays).
+
+---
+
 # Frost — Phase 5.2: World 03's crystal shards
 
 **Crystal Mountains** gets falling crystal spires. A pulsing ring and a tall beam of light mark a lane from far away; the spire falls

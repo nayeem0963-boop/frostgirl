@@ -399,7 +399,7 @@ export default function RunnerGame() {
       {phase === 'gameover' && <div className="runner-flash" aria-hidden="true" />}
       {phase === 'gameover' && showOver && outcome && (
         <div className="runner-screen runner-over" data-screen="gameover">
-          <h2>{outcome.hit === 'wolf' ? 'The wolf got you' : outcome.hit === 'shard' ? 'Crushed by a crystal' : outcome.hit === 'ridge' ? 'You tripped on the fallen pine' : 'You hit the ice'}</h2>
+          <h2>{outcome.hit === 'wolf' ? 'The wolf got you' : outcome.hit === 'shard' ? 'Crushed by a crystal' : outcome.hit === 'hole' ? 'You fell through the ice' : outcome.hit === 'ridge' ? 'You tripped on the fallen pine' : 'You hit the ice'}</h2>
           <p className="runner-label">Distance</p>
           <p className="runner-final">{outcome.distance}<small> m</small></p>
           <p className="runner-tag">of {finish} m · {Math.floor((outcome.distance / finish) * 100)}%</p>
