@@ -8,7 +8,8 @@
 //   patternWeights      multipliers (default 1) per obstacle pattern, see PATTERNS in src/runner/sim/patterns.js
 //   finishDistance      metres to finish the level; difficultySeconds: run time until the generator is at full difficulty
 
-export const PATTERN_IDS = ['wall1', 'wall2', 'ridge', 'arch', 'slalom', 'wallRidge', 'archWall', 'zigzag']
+export const PATTERN_IDS = ['wall1', 'wall2', 'ridge', 'arch', 'slalom', 'wallRidge', 'archWall', 'zigzag', 'wolf', 'wolfWall', 'wolfPair']
+// `hazards`: signature hazards a world turns on (each needs its pattern weights too, see sim/patterns.js `opt`)
 
 const WORLD_1 = {
   sky: { zenith: '#5b82b4', mid: '#9db7d4', horizon: '#dde5ee', sun: '#fff1d6' },
@@ -18,6 +19,7 @@ const WORLD_1 = {
   ground: { base: '#f2f6fb', speck: [170, 195, 225], spread: [50, 40, 25] },
   trail: { base: '#d3e1f0', speck: [150, 175, 205], spread: [40, 35, 30], shade: [120, 160, 205], divider: [70, 130, 205], rail: [55, 115, 200] },
   backdrop: null,
+  hazards: {},
   patternWeights: {},
   finishDistance: 1500,
   difficultySeconds: 150,
@@ -45,7 +47,8 @@ export const runnerThemes = {
     ground: { base: '#eaf7f5', speck: [160, 205, 210] },
     trail: { base: '#c9e4e4', speck: [140, 185, 190], shade: [100, 160, 165], divider: [50, 140, 150], rail: [35, 125, 140] },
     backdrop: { crop: 0.42 },
-    patternWeights: { slalom: 1.5, wall2: 1.25 },
+    hazards: { wolf: true }, // the wolf waits at the trail's edge, then lunges into a lane (wolf.glb)
+    patternWeights: { slalom: 1.5, wall2: 1.25, wolf: 1.6, wolfWall: 1.0, wolfPair: 0.8 },
     finishDistance: 1500,
   }),
   // Crystal Mountains: violet-blue, big drops -> ridges and arches

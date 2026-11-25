@@ -3,7 +3,9 @@
 import { command, aheadOf } from './sim.js'
 import { LANES } from '../config.js'
 
-const laneOf = (o) => LANES.indexOf(o.x)
+// walls and wolves block one lane; a wolf's x is still moving while it lunges, so its lane is stored on it
+const laneOf = (o) => o.lane ?? LANES.indexOf(o.x)
+const blocksLane = (o) => o.kind === 'wall' || o.kind === 'wolf'
 
 export function createBot() {
   return { done: new Set() } // rows already acted on
@@ -49,7 +51,7 @@ function steerToOrbs(sim) {
   // whenever it is close enough that a dodge from the new lane would be rushed
   const next = sim.lane + Math.sign(best.lane - sim.lane) // one lane at a time: the lane in between must be safe too
   for (const o of sim.obstacles) {
-    if (!o.active || o.kind !== 'wall' || (laneOf(o) !== best.lane && laneOf(o) !== next)) continue
+    if (!o.active || !blocksLane(o) || (laneOf(o) !== best.lane && laneOf(o) !== next)) continue
     const a = aheadOf(sim, o)
     if (a > -0.9 && (a < best.a + 4 || a < sim.speed * 2.2)) return
   }
