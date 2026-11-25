@@ -18,7 +18,7 @@ export function createBot() {
 export function botStep(sim, bot) {
   if (sim.phase !== 'running' || sim.paused) return
   const v = sim.speed
-  const near = sim.obstacles.filter((o) => o.active && aheadOf(sim, o) > BEHIND) // an obstacle still counts until its danger zone is clear behind her
+  const near = sim.obstacles.filter((o) => o.active && aheadOf(sim, o) > BEHIND && aheadOf(sim, o) <= sim.vision) // an obstacle still counts until its danger zone is clear behind her
   if (near.length) {
     const first = Math.min(...near.map((o) => aheadOf(sim, o)))
     const row = near.filter((o) => Math.abs(aheadOf(sim, o) - first) < 0.01)
@@ -46,7 +46,7 @@ function steerToOrbs(sim) {
   for (const o of sim.orbs) {
     if (!o.active || o.taken) continue
     const a = aheadOf(sim, o)
-    if (a < 1.5 || a > 40) continue
+    if (a < 1.5 || a > Math.min(40, sim.vision)) continue
     if (!best || a < best.a) best = { a, lane: LANES.indexOf(o.x), y: o.y }
   }
   if (!best || best.lane === sim.lane) return
@@ -54,7 +54,7 @@ function steerToOrbs(sim) {
   // whenever it is close enough that a dodge from the new lane would be rushed
   const next = sim.lane + Math.sign(best.lane - sim.lane) // one lane at a time: the lane in between must be safe too
   for (const o of sim.obstacles) {
-    if (!o.active || !blocksLane(o) || (laneOf(o) !== best.lane && laneOf(o) !== next)) continue
+    if (!o.active || !blocksLane(o) || aheadOf(sim, o) > sim.vision || (laneOf(o) !== best.lane && laneOf(o) !== next)) continue
     const a = aheadOf(sim, o)
     if (a > BEHIND && (a < best.a + 4 || a < sim.speed * 2.2)) return
   }
