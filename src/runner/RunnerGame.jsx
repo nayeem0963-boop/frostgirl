@@ -9,7 +9,10 @@ import { MountainMassif } from '../expedition/scene/Distant.jsx'
 import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
+import { FinishGate } from './scene/FinishGate.jsx'
 import { pickWorld } from './worlds.js'
+import { loadProgress, saveProgress, recordRun, nextWorldId } from './progress.js'
+import { worldIds } from '../worlds/runnerThemes.js'
 import { RunnerForest } from './scene/RunnerForest.jsx'
 import { Obstacles } from './scene/Obstacles.jsx'
 import { Orbs } from './scene/Orbs.jsx'
@@ -21,6 +24,7 @@ import { cameraFor, cameraTarget } from './sim/camera.js'
 import './runner.css'
 
 const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+const DONE_DELAY = 1400 // ms of celebration before the level-complete panel
 const OVER_DELAY = 600 // ms between the impact and the game-over panel / restart being available
 const FLAT_WORLD = { height: () => 0 } // MountainMassif only needs a ground height
 const SUN = new Vector3(-0.42, 0.36, 0.83).normalize()
@@ -158,6 +162,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
       <Sky colors={t.sky} />
       <Ground sim={sim} theme={t} />
       <Obstacles sim={sim} />
+      <FinishGate sim={sim} />
       <Shadow sim={sim} />
       <HitBurst sim={sim} />
       <Snowfall count={t.snow.count[quality] ?? t.snow.count.high} paused={false} color={t.snow.color} />
@@ -180,6 +185,14 @@ function Ready() {
   return null
 }
 
+function Stars({ n, big }) {
+  return (
+    <span className={big ? 'stars stars-big' : 'stars'} aria-hidden="true">
+      {[1, 2, 3].map((i) => <b key={i} className={i <= n ? 'on' : ''}>★</b>)}
+    </span>
+  )
+}
+
 export default function RunnerGame() {
   const sim = useRef(null)
   const [world] = useState(() => pickWorld())
@@ -187,9 +200,9 @@ export default function RunnerGame() {
   const [phase, setPhase] = useState('ready')
   const [paused, setPaused] = useState(false)
   const [score, setScore] = useState(0)
-  const [best, setBest] = useState(() => { try { return Number(localStorage.getItem('frost-runner-best')) || 0 } catch { return 0 } })
+  const [progress, setProgress] = useState(() => loadProgress()) // saved per-world bests and stars (progress.js)
   const [orbs, setOrbs] = useState(0)
-  const [bestOrbs, setBestOrbs] = useState(() => { try { return Number(localStorage.getItem('frost-runner-best-orbs')) || 0 } catch { return 0 } })
+  const [outcome, setOutcome] = useState(null) // {completed, stars, distance, orbs, seen} of the run that just ended
   const [auto, setAuto] = useState(false) // Auto play: watch-only, the bot drives
   const autoTimer = useRef(0)
   const bot = useRef(null)
@@ -199,6 +212,8 @@ export default function RunnerGame() {
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
   const hitAt = useRef(0)
   const [showOver, setShowOver] = useState(false)
+  const saved = progress.worlds[world.id] ?? { best: 0, bestOrbs: 0, stars: 0, completed: false }
+  const finish = world.runner.finishDistance
   const overTimer = useRef(0)
 
   useEffect(() => { readyCb = () => setLoaded(true); return () => { readyCb = () => {} } }, [])
@@ -206,7 +221,7 @@ export default function RunnerGame() {
   const start = useCallback(() => {
     const s = sim.current
     if (s.phase === 'running') return
-    if (s.phase === 'gameover' && performance.now() - hitAt.current < OVER_DELAY) return // no accidental instant restart (the panel is not up yet)
+    if ((s.phase === 'gameover' || s.phase === 'complete') && performance.now() - hitAt.current < (s.phase === 'complete' ? DONE_DELAY : OVER_DELAY)) return // no accidental instant restart (the panel is not up yet)
     clearTimeout(autoTimer.current)
     startRun(s, (Math.random() * 1e9) | 0)
     setAuto(false); setScore(0); setOrbs(0)
@@ -236,19 +251,20 @@ export default function RunnerGame() {
   const onPhase = useCallback((p, pz) => {
     setPhase(p); setPaused(pz)
     clearTimeout(overTimer.current)
-    if (p === 'gameover' && sim.current.auto) {
-      // the bot should not die; if it ever does, just start another demonstration run
-      autoTimer.current = setTimeout(() => { if (sim.current.auto && sim.current.phase === 'gameover') startAuto() }, 1500)
-    } else if (p === 'gameover') {
+    const s = sim.current
+    if ((p === 'gameover' || p === 'complete') && s.auto) {
+      // Auto play never touches the saved progress; it just starts another demonstration run after a moment
+      autoTimer.current = setTimeout(() => { if (s.auto && (s.phase === 'gameover' || s.phase === 'complete')) startAuto() }, p === 'complete' ? 3500 : 1500)
+    } else if (p === 'gameover' || p === 'complete') {
+      const done = p === 'complete'
       hitAt.current = performance.now()
-      overTimer.current = setTimeout(() => setShowOver(true), OVER_DELAY) // let the impact play out before the panel
-      const o = sim.current.orbCount
-      setBestOrbs((b) => { const nb = Math.max(b, o); try { localStorage.setItem('frost-runner-best-orbs', String(nb)) } catch { /* private mode */ } return nb })
-      setScore((sc) => { setBest((b) => { const nb = Math.max(b, sc); try { localStorage.setItem('frost-runner-best', String(nb)) } catch { /* private mode */ } return nb }); return sc })
+      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen })
+      setProgress((prev) => { const next = recordRun(prev, world.id, { distance: s.dist, orbs: s.orbCount, completed: done, stars: s.stars }); saveProgress(next); return next })
+      overTimer.current = setTimeout(() => setShowOver(true), done ? DONE_DELAY : OVER_DELAY) // let the impact / the celebration play out first
     } else {
       setShowOver(false)
     }
-  }, [startAuto])
+  }, [startAuto, world.id])
   useEffect(() => () => { clearTimeout(overTimer.current); clearTimeout(autoTimer.current) }, [])
 
   useEffect(() => {
@@ -293,11 +309,18 @@ export default function RunnerGame() {
       <div className="runner-hud" aria-live="polite">
         <span className="runner-score">{score} m</span>
         <span className="runner-orbs" aria-label={`${orbs} orbs`}><i aria-hidden="true" />{orbs}</span>
-        {best > 0 && !auto && <span className="runner-best">Best {best} m</span>}
+        {saved.best > 0 && !auto && <span className="runner-best">Best {saved.best} m</span>}
         {auto && <span className="runner-auto" data-testid="auto-badge">Auto play</span>}
         {auto && <button className="runner-stop" onClick={exitAuto}>Stop</button>}
         {phase === 'running' && !auto && <button className="runner-pause" onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶' : 'Ⅱ'}</button>}
       </div>
+
+      {phase !== 'ready' && !showOver && (
+        <div className="runner-progress" role="progressbar" aria-label="Level progress" aria-valuemin={0} aria-valuemax={finish} aria-valuenow={Math.min(score, finish)}>
+          <i style={{ width: `${Math.min(100, (score / finish) * 100)}%` }} />
+          <span>{finish} m</span>
+        </div>
+      )}
 
       {!loaded && <div className="runner-screen"><p className="runner-loading">Loading Frost…</p></div>}
 
@@ -305,6 +328,7 @@ export default function RunnerGame() {
         <div className="runner-screen" data-screen="start">
           <h1>Frost</h1>
           <p className="runner-tag">Run the snowy trail with Aisha</p>
+          <p className="runner-level" data-testid="level-info">{world.name} · {finish} m{saved.stars > 0 && <> · <Stars n={saved.stars} /></>}{saved.best > 0 && saved.stars === 0 && <> · best {saved.best} m</>}</p>
           <button className="runner-btn" onClick={start} autoFocus>Start run</button>
           <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
           <p className="runner-hint">Auto play: watch Aisha run by herself</p>
@@ -324,14 +348,27 @@ export default function RunnerGame() {
       )}
 
       {phase === 'gameover' && <div className="runner-flash" aria-hidden="true" />}
-      {phase === 'gameover' && showOver && (
+      {phase === 'gameover' && showOver && outcome && (
         <div className="runner-screen runner-over" data-screen="gameover">
           <h2>You hit the ice</h2>
           <p className="runner-label">Distance</p>
-          <p className="runner-final">{score}<small> m</small></p>
-          <p className="runner-orbs-final"><i aria-hidden="true" />{orbs} {orbs === 1 ? 'orb' : 'orbs'}{bestOrbs > 0 && orbs >= bestOrbs ? ' · best!' : ''}</p>
-          <p className="runner-tag">{best > 0 && score >= best ? 'New best!' : `Best ${best} m`}</p>
+          <p className="runner-final">{outcome.distance}<small> m</small></p>
+          <p className="runner-tag">of {finish} m · {Math.floor((outcome.distance / finish) * 100)}%</p>
+          <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} {outcome.orbs === 1 ? 'orb' : 'orbs'}{saved.bestOrbs > 0 && outcome.orbs >= saved.bestOrbs ? ' · best!' : ''}</p>
+          <p className="runner-tag">{saved.best > 0 && outcome.distance >= saved.best ? 'New best!' : `Best ${saved.best} m`}</p>
           <button className="runner-btn" onClick={start} autoFocus>Restart</button>
+          <p className="runner-hint">Enter · Space · R</p>
+        </div>
+      )}
+      {phase === 'complete' && showOver && outcome && (
+        <div className="runner-screen runner-over runner-done" data-screen="complete">
+          <h2>Level complete</h2>
+          <p className="runner-world">{world.name}</p>
+          <p className="runner-stars" aria-label={`${outcome.stars} of 3 stars`}><Stars n={outcome.stars} big /></p>
+          <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} / {outcome.seen} orbs</p>
+          <p className="runner-tag">{outcome.distance} m · best {saved.stars}★</p>
+          <button className="runner-btn" onClick={start} autoFocus>Play again</button>
+          {nextWorldId(world.id, worldIds) && <a className="runner-btn runner-btn-alt runner-next" href={`?game=frost&world=${nextWorldId(world.id, worldIds)}${debug ? '&debug' : ''}`}>Next world</a>}
           <p className="runner-hint">Enter · Space · R</p>
         </div>
       )}

@@ -21,6 +21,8 @@ export const RUNNER_STATES = {
   // no dedicated duck clip exists: hold the crouch pose of the jump export
   duck: { clip: 'land', loop: false, fade: 0.09, range: [0.26, 0.34], timeScale: 1, noLift: false },
   hurt: { clip: 'land', loop: false, fade: 0.05, range: [0.26, 0.34], timeScale: 1, noLift: false },
+  // level complete: the Victory_Cheer clip (aisha.glb 'celebrate'), looped
+  celebrate: { clip: 'celebrate', loop: true, fade: 0.3 },
 }
 
 export function RunnerAisha({ sim, debug }) {
