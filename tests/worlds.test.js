@@ -113,14 +113,17 @@ test('worlds use their own finish distance and difficulty ramp', () => {
 })
 
 // ---- every world is playable ---------------------------------------------------------------------------------------------------
-test('every world is survivable by the Auto play bot (2 seeds x 150 s each)', () => {
+test('every world can be finished by the Auto play bot (2 seeds, whole level)', () => {
   for (const id of worldIds) {
     for (const seed of [31, 32]) {
-      const s = createSim(seed, themeFor(id)); startRun(s, seed, { auto: true })
+      const w = themeFor(id)
+      const s = createSim(seed, w); startRun(s, seed, { auto: true })
       const bot = createBot(); s.driver = (q) => botStep(q, bot)
-      for (let t = 0; t < 150 && s.phase === 'running'; t += 1 / 60) update(s, 1 / 60)
-      assert.equal(s.phase, 'running', `world ${id} seed ${seed}: bot died at ${s.time.toFixed(1)} s hitting ${s.hit?.kind} ahead ${s.hit && aheadOf(s, s.hit).toFixed(1)}`)
+      for (let t = 0; t < 400 && s.phase === 'running'; t += 1 / 60) update(s, 1 / 60)
+      assert.equal(s.phase, 'complete', `world ${id} seed ${seed}: ${s.phase} at ${s.time.toFixed(1)} s, ${s.dist.toFixed(0)}/${w.finishDistance} m, hit ${s.hit?.kind} ahead ${s.hit && aheadOf(s, s.hit).toFixed(1)}`)
+      assert.ok(s.dist >= w.finishDistance)
       assert.ok(s.orbCount > 10, `world ${id}: ${s.orbCount} orbs`)
+      assert.ok(s.stars >= 1 && s.stars <= 3)
     }
   }
 })
