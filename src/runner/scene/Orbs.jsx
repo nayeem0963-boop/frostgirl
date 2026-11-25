@@ -3,7 +3,7 @@
 import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
-import { Box3, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
+import { Box3, IcosahedronGeometry, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ORBS } from '../config.js'
 
@@ -43,9 +43,17 @@ function orbParts(scene) {
   const k = (ORBS.radius * 2 * 0.92) / Math.max(size.x, size.y, size.z)
   const normalise = new Matrix4().makeScale(k, k, k).multiply(new Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z))
   const groups = new Map()
+  const seenShell = new Set()
   scene.traverse((o) => {
     if (!o.isMesh) return
-    const g = o.geometry.clone().applyMatrix4(new Matrix4().multiplyMatrices(normalise, o.matrixWorld))
+    // The three nested spheres are ~760 triangles each. Budget: the middle shell shares the outer shell's material and is
+    // hidden inside it, so it is skipped; the outer shell and core are rebuilt as low-poly icospheres with the same
+    // extents (the mesh is ~30 px on screen). The crystals are kept as authored. 2,440 -> ~560 triangles.
+    const sphere = o.geometry.attributes.position.count > 200
+    if (sphere && seenShell.has(o.material)) return
+    if (sphere) seenShell.add(o.material)
+    const source = sphere ? new IcosahedronGeometry(1, o.material.name === 'lambert4' ? 1 : 2) : o.geometry
+    const g = (source.index ? source.toNonIndexed() : source.clone()).applyMatrix4(new Matrix4().multiplyMatrices(normalise, o.matrixWorld))
     for (const name of Object.keys(g.attributes)) if (!['position', 'normal'].includes(name)) g.deleteAttribute(name)
     const list = groups.get(o.material) ?? []
     list.push(g)
@@ -79,7 +87,7 @@ export function Orbs({ sim }) {
     const t = clock.elapsedTime
     let n = 0
     for (const o of s.orbs) {
-      if (!o.active) continue
+      if (!o.active || o.dist - s.dist > ORBS.drawAhead) continue // beyond ~55 m an orb is a few pixels
       const pop = o.taken ? o.takenT / ORBS.popTime : 0
       tmp.position.set(o.x, o.y + Math.sin(t * 2.4 + o.id) * 0.06 + pop * 0.9, -(o.dist - s.dist))
       tmp.rotation.set(0, t * 1.6 + o.id, 0)
