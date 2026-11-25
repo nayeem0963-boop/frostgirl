@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
 const base = process.argv[2] ?? 'http://127.0.0.1:4173'
 const worldArg = process.argv.find((a) => a.startsWith('--world='))?.slice(8) // e.g. --world=02 measures that world
-const worldQuery = worldArg ? `&world=${worldArg}` : ''
+const worldQuery = worldArg ? `&world=${worldArg}&unlock=all` : ''
 const budgetMode = process.argv.includes('--budget') // fail (exit 1) when over the mobile budget
 // Mobile budget (per frame, 'everything' row): see docs/FROST.md
 export const BUDGET = { triangles: 350_000, calls: 30 }
