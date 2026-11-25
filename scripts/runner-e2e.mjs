@@ -522,6 +522,56 @@ if (want('wolf')) {
   await ctx.close()
 }
 
+// ------------------------------------------------------------------ World 03: crystal shards (Phase 5.2)
+if (want('shard')) {
+  const putShard = (page, lane, ahead) => S(page, ([lane, ahead]) => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'shard', lane, side: 0, dist: s.dist + ahead, id: 6000 + Math.random(), x: [-2.2, 0, 2.2][lane] }) }, [lane, ahead])
+  const shardAhead = (page) => S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === 'shard'); return o ? o.dist - s.dist : null })
+  const waitAhead = async (page, at) => { for (let i = 0; i < 6000; i++) { const a = await shardAhead(page); if (a === null || a <= at) return a; await realSleep(10) } return null }
+  // additive-blended instanced meshes = the warning ring and the beam of light
+  const warnings = (page) => S(page, () => { let n = 0; window.__frostRunner.debug.scene.traverse((o) => { if (o.isInstancedMesh && o.material.blending === 2) n += o.count }); return n })
+  const { ctx, page, errors } = await open({ width: 960, height: 540 }, false, '&world=03&unlock=all')
+  await page.keyboard.press('Enter'); await sleep(500); await clear(page)
+  await putShard(page, 1, 58)
+  check('a warning (ring + beam of light) shows the lane before the shard falls', (await warnings(page)) >= 2, `${await warnings(page)} warning meshes`)
+  await waitAhead(page, 26)
+  await page.screenshot({ path: `${out}/17-shard-falling.png` })
+  const falling = await S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === 'shard'); return { ahead: o.dist - s.dist, x: o.x } })
+  check('the shard is falling at 26 m and its collider is in its lane (static)', falling.ahead <= 26 && Math.abs(falling.x) < 0.01, JSON.stringify(falling))
+  await waitAhead(page, 15)
+  await sleep(100)
+  check('the warning is gone once it has landed 16 m ahead', (await warnings(page)) === 0)
+  await page.screenshot({ path: `${out}/18-shard-landed.png` })
+  await page.keyboard.press('ArrowLeft'); await sleep(2500)
+  check('switching lanes dodges the shard', (await sim(page)).phase === 'running')
+  // a jump does not clear it (2 m > the 1.7 m apex)
+  await clear(page); await S(page, () => { const s = window.__frostRunner.sim; s.x = s.x })
+  await putShard(page, (await sim(page)).lane, 40)
+  await waitAhead(page, 3.4)
+  await S(page, () => window.__frostRunner.command('jump'))
+  await page.waitForSelector('[data-screen="gameover"]', { timeout: 120000 })
+  check('a jump does not clear a shard; the crash says so', /Crushed by a crystal/.test(await page.locator('[data-screen="gameover"] h2').innerText()))
+  await page.screenshot({ path: `${out}/19-shard-game-over.png` })
+  check('no page errors (shard)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('shard')) {
+  // Auto play in World 03 survives a stretch with real shards; worlds 01 and 02 never see one
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=03&unlock=all')
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  const seen = new Set(); let last = { t: 0, ph: 'running' }
+  for (let i = 0; i < 12000; i++) {
+    last = await S(page, () => { const s = window.__frostRunner.sim; return { t: s.time, ph: s.phase, ids: s.obstacles.filter((o) => o.active && o.kind === 'shard').map((o) => o.id) } })
+    last.ids.forEach((x) => seen.add(x))
+    if (last.t >= 40 || last.ph !== 'running') break
+    await realSleep(60)
+  }
+  check('Auto play survives 40 s of World 03 with shards', last.ph === 'running' && last.t >= 40, `t ${last.t.toFixed(1)} s, ${seen.size} shards met`)
+  check('World 03 really produces shards', seen.size >= 3, `${seen.size}`)
+  check('no page errors (World 03 Auto play)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
 // ------------------------------------------------------------------ phone portrait: swipes
 async function phone(viewport, tag) {
   const { ctx, page, errors } = await open(viewport, true)
