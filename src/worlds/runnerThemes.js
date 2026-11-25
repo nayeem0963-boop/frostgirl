@@ -20,6 +20,7 @@ const WORLD_1 = {
   trail: { base: '#d3e1f0', speck: [150, 175, 205], spread: [40, 35, 30], shade: [120, 160, 205], divider: [70, 130, 205], rail: [55, 115, 200] },
   backdrop: null,
   hazards: {},
+  gust: null, // World 06: { startAt, period, jitter } (see sim/gust.js)
   mist: null, // World 05: { startAt, period, length, ramp, near, far, color } (see sim/mist.js)
   patternWeights: {},
   finishDistance: 1500,
@@ -101,6 +102,8 @@ export const runnerThemes = {
     ground: { base: '#e9eeff', speck: [150, 165, 225] },
     trail: { base: '#c6d0f0', speck: [130, 145, 205], shade: [100, 115, 200], divider: [70, 95, 210], rail: [55, 80, 205] },
     backdrop: { crop: 0.42 },
+    hazards: { gust: true }, // aurora gusts shove Aisha one lane at marked lines
+    gust: { startAt: 150, period: 200, jitter: 40 }, // gust 0 near 150-190 m, then every ~200 m; the last well before the finish
     patternWeights: { zigzag: 1.6, slalom: 1.2 },
     finishDistance: 1900,
   }),
