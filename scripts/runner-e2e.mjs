@@ -9,6 +9,8 @@ const { chromium } = require('playwright')
 const base = process.argv[2] ?? 'http://127.0.0.1:4173'
 const out = process.argv[3] ?? '/tmp/frost-e2e'
 mkdirSync(out, { recursive: true })
+const only = (process.env.ONLY ?? '').split(',').filter(Boolean) // e.g. ONLY=orbs,auto reruns just those sections
+const want = (name) => only.length === 0 || only.includes(name)
 const results = []
 const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`) }
 const realSleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -51,7 +53,7 @@ const actAt = (page, kind, cmd, secs) => S(page, ([kind, cmd, secs]) => new Prom
 }), [kind, cmd, secs])
 // In-page trigger for an orb: jumps in the frame where the nearest uncollected high orb is `secs` of running away.
 const jumpAtOrb = (page, secs) => S(page, (secs) => new Promise((res) => {
-  const tick = () => { const s = window.__frostRunner.sim; const o = s.orbs.find((q) => q.active && !q.taken && q.y > 2); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= secs * s.speed) { window.__frostRunner.command('jump'); return res(true) } requestAnimationFrame(tick) }
+  const tick = () => { const s = window.__frostRunner.sim; const o = s.orbs.find((q) => q.active && !q.taken && q.y > 2 && q.dist - s.dist > 0); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= secs * s.speed) { window.__frostRunner.command('jump'); return res(true) } requestAnimationFrame(tick) }
   tick()
 }), secs)
 // Remove generated obstacles so lane/jump/duck tests are not interrupted, then place one on demand.
@@ -63,7 +65,7 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
 }, [kind, lane, ahead])
 
 // ------------------------------------------------------------------ desktop
-{
+if (want('desktop')) {
   const { ctx, page, errors } = await open({ width: 1534, height: 630 })
   await page.screenshot({ path: `${out}/01-start-screen.png` })
   const before = await sim(page)
@@ -204,7 +206,7 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
 }
 
 // ------------------------------------------------------------------ orbs and Auto play
-{
+if (want('orbs')) {
   const { ctx, page, errors } = await open({ width: 1280, height: 640 })
   const putOrb = (lane, y, ahead) => S(page, ([lane, y, ahead]) => { const s = window.__frostRunner.sim; const o = s.orbs.find((q) => !q.active); Object.assign(o, { active: true, taken: false, takenT: 0, x: [-2.2, 0, 2.2][lane], y, dist: s.dist + ahead, id: 8000 + Math.random() }) }, [lane, y, ahead])
   check('start screen offers Auto play', await page.getByRole('button', { name: 'Auto play' }).isVisible())
@@ -231,7 +233,7 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   void errors
 }
 
-{
+if (want('auto')) {
   const { ctx, page, errors } = await open({ width: 1280, height: 640 })
   await page.getByRole('button', { name: 'Auto play' }).click()
   await sleep(600)
@@ -317,11 +319,13 @@ async function phone(viewport, tag) {
   check(`[${tag}] no page errors`, errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
   await ctx.close()
 }
-await phone({ width: 390, height: 844 }, 'phone-portrait')
-await phone({ width: 844, height: 390 }, 'phone-landscape')
+if (want('phone')) {
+  await phone({ width: 390, height: 844 }, 'phone-portrait')
+  await phone({ width: 844, height: 390 }, 'phone-landscape')
+}
 
 // Retry/Restart button stays on screen at 1534x630 and on phones
-{
+if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })
   await page.keyboard.press('Enter'); await sleep(300); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
   await page.waitForSelector('[data-screen="gameover"] .runner-btn', { timeout: 20000 })
