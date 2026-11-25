@@ -35,7 +35,7 @@ export const OBSTACLES = {
   wall: { halfW: 0.95, halfD: 0.45, y0: 0, y1: 2.4 }, // one lane, full height: switch lanes
   ridge: { halfW: LANE_WIDTH * 1.5, halfD: 0.4, y0: 0, y1: 0.8 }, // all lanes, low: jump
   arch: { halfW: LANE_WIDTH * 1.5, halfD: 0.4, y0: 1.4, y1: 2.8 }, // all lanes, overhead: duck (head top ducked 1.2 m)
-  wolf: { halfW: 0.5, halfD: 0.6, y0: 0, y1: 1.0 }, // World 02: one lane, 1 m high: switch lanes or jump it (wolf.glb scaled to 0.65 = 1.05 m)
+  wolf: { halfW: 0.5, halfD: 0.6, y0: 0, y1: 1.0 }, // World 02: one lane, 1 m high: switch lanes or jump it (wolf.glb is scaled to 0.8 = 1.3 m)
 }
 
 // Run animation: playback rate follows ground speed so her feet do not slide.
@@ -72,5 +72,5 @@ export const WOLF = {
   sideX: 5.6, // where it waits: just outside the trail
   lungeFrom: 26, // metres ahead when it starts to run
   lungeTo: 14, // ... and is in its lane
-  scale: 0.65,
+  scale: 0.8, // 1.3 m tall, 1.5 m long (the collider is a little smaller: 1.0 m high, 1.2 m long)
 }

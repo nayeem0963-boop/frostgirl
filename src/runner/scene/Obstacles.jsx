@@ -96,7 +96,7 @@ function softTexture() {
   return t
 }
 
-const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9] } // footprint under each obstacle
+const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9], wolf: [1.9, 2.0] } // footprint under each obstacle
 const MARK_AHEAD = 8
 
 export function Obstacles({ sim }) {
@@ -128,7 +128,7 @@ export function Obstacles({ sim }) {
   const tmp = useMemo(() => new Object3D(), [])
   useFrame(() => {
     const s = sim.current
-    const n = { wall: 0, ridge: 0, arch: 0 }
+    const n = { wall: 0, ridge: 0, arch: 0, wolf: 0 }
     let sh = 0
     const span = LANES[2] * 2 + 2.2
     for (const o of s.obstacles) {
@@ -137,7 +137,7 @@ export function Obstacles({ sim }) {
       tmp.position.set(o.x, 0, z)
       tmp.scale.set(1, 1, 1)
       tmp.updateMatrix()
-      meshes[o.kind].setMatrixAt(n[o.kind]++, tmp.matrix)
+      if (meshes[o.kind]) meshes[o.kind].setMatrixAt(n[o.kind]++, tmp.matrix) // (a wolf has no instanced mesh: scene/Wolves.jsx draws it)
       const [w, d] = SHADOW[o.kind]
       tmp.position.set(o.x, 0.03, z)
       tmp.scale.set(w, 1, d)
@@ -148,7 +148,7 @@ export function Obstacles({ sim }) {
     shadow.count = sh; shadow.instanceMatrix.needsUpdate = true
     let mr = 0, ma = 0
     for (const o of s.obstacles) {
-      if (!o.active || o.kind === 'wall') continue
+      if (!o.active || o.kind === 'wall' || o.kind === 'wolf') continue
       tmp.position.set(0, 0.035, -(o.dist - s.dist) - MARK_AHEAD)
       tmp.scale.set(span, 1, 2.6)
       tmp.updateMatrix()

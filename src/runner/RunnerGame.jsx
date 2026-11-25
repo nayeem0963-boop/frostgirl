@@ -10,6 +10,7 @@ import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
 import { FinishGate } from './scene/FinishGate.jsx'
+import { Wolves } from './scene/Wolves.jsx'
 import { pickWorld, unlockAllRequested } from './worlds.js'
 import { loadProgress, saveProgress, recordRun, nextWorldId, describeWorlds } from './progress.js'
 import { worldIds } from '../worlds/runnerThemes.js'
@@ -171,6 +172,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
         <RunnerForest sim={sim} quality={quality} />
         <RunnerAisha sim={sim} debug={debug} />
         <Orbs sim={sim} />
+        {t.hazards?.wolf && <Wolves sim={sim} />}
         <Ready />
       </Suspense>
       <Suspense fallback={null}>
@@ -279,7 +281,7 @@ export default function RunnerGame() {
     } else if (p === 'gameover' || p === 'complete') {
       const done = p === 'complete'
       hitAt.current = performance.now()
-      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen })
+      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen, hit: s.hit?.kind })
       setProgress((prev) => { const next = recordRun(prev, world.id, { distance: s.dist, orbs: s.orbCount, completed: done, stars: s.stars }); saveProgress(next); return next })
       overTimer.current = setTimeout(() => setShowOver(true), done ? DONE_DELAY : OVER_DELAY) // let the impact / the celebration play out first
     } else {
@@ -397,7 +399,7 @@ export default function RunnerGame() {
       {phase === 'gameover' && <div className="runner-flash" aria-hidden="true" />}
       {phase === 'gameover' && showOver && outcome && (
         <div className="runner-screen runner-over" data-screen="gameover">
-          <h2>You hit the ice</h2>
+          <h2>{outcome.hit === 'wolf' ? 'The wolf got you' : outcome.hit === 'ridge' ? 'You tripped on the fallen pine' : 'You hit the ice'}</h2>
           <p className="runner-label">Distance</p>
           <p className="runner-final">{outcome.distance}<small> m</small></p>
           <p className="runner-tag">of {finish} m · {Math.floor((outcome.distance / finish) * 100)}%</p>

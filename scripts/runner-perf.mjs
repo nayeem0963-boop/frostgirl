@@ -62,6 +62,16 @@ async function measure(name, viewport, mobile) {
     window.__frostRunner.sim.dist = window.__frostRunner.sim.world.finishDistance - 40
     await frames(8)
     out.push(await read('everything, finish gate in view'))
+    // a world with a signature hazard: measure it on screen too (World 02: two wolves, one of them mid-lunge)
+    const sm = window.__frostRunner.sim
+    if (sm.world.hazards?.wolf) {
+      sm.dist = 0; sm.gen.lastPos = 1e9
+      for (const o of sm.obstacles) o.active = false
+      const put = (lane, side, ahead, id) => { const o = sm.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'wolf', lane, side, dist: sm.dist + ahead, id, x: side * 5.6 }) }
+      put(0, -1, 18, 9101); put(2, 1, 30, 9102)
+      await frames(3)
+      out.push(await read('everything, wolves in view'))
+    }
     d.gl.info.autoReset = true
     const i = d.gl.info
     return { out, geometries: i.memory.geometries, textures: i.memory.textures, simMs: d.simMs, heap: performance.memory?.usedJSHeapSize }
