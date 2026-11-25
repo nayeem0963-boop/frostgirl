@@ -368,7 +368,8 @@ test('generator: patterns vary, no signature three times in a row, difficulty ri
 test('generator: patterns are survivable by the Auto play bot, from 1 to 180 s, for many seeds', () => {
   for (let seed = 1; seed <= 12; seed++) {
     const s = botRun(seed, DIFFICULTY_SECONDS + 30)
-    assert.equal(s.phase, 'running', `seed ${seed}: bot died at ${s.time.toFixed(1)}s hitting ${s.hit?.kind} lane ${s.hit && LANES.indexOf(s.hit.x)} (lane ${s.lane})`)
+    assert.notEqual(s.phase, 'gameover', `seed ${seed}: bot died at ${s.time.toFixed(1)}s hitting ${s.hit?.kind} lane ${s.hit && LANES.indexOf(s.hit.x)} (lane ${s.lane})`)
+    assert.equal(s.phase, 'complete', `seed ${seed}: the bot finishes the 1,500 m level within the time limit`)
   }
 })
 

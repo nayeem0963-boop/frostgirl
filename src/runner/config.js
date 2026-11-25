@@ -56,3 +56,11 @@ export const ORBS = {
   spawnAhead: 75,
   drawAhead: 55, // orbs further than this are not drawn (mobile triangle budget)
 }
+
+// Levels (4.3): a world's finish distance lives in src/worlds/runnerThemes.js.
+export const LEVEL = {
+  clearance: 25, // no obstacle or orb is placed within this many metres of the finish line: a clean run-in
+  stopDecel: 9, // m/s^2 while Aisha coasts to a stop after the line
+  twoStars: 0.5, // share of the level's orbs collected for 2 stars
+  threeStars: 0.75, // ... for 3 stars (finishing alone is 1 star)
+}

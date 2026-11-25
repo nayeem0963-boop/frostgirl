@@ -1,6 +1,7 @@
 // Pure runner simulation (no React / three): state machine, player physics,
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
-import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS } from '../config.js'
+import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL } from '../config.js'
+import { starsFor } from '../progress.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
 
@@ -31,7 +32,7 @@ function emit(sim, name) {
 export function createSim(seed = 1, world = themeFor('01')) {
   return {
     world, // this world's runner data (pattern weights, finish distance, ...): src/worlds/runnerThemes.js
-    phase: 'ready', // ready | running | gameover
+    phase: 'ready', // ready | running | gameover | complete (crossed the finish line)
     paused: false,
     seed,
     rand: mulberry32(seed),
@@ -48,7 +49,7 @@ export function createSim(seed = 1, world = themeFor('01')) {
     duckT: 0, // 0..1 eased, for the pose / lean only
     landT: 0,
     anim: 'idle',
-    gen: { n: 0, history: [], lastRow: null, lastPos: 0 },
+    gen: { n: 0, history: [], lastRow: null, lastPos: 0, done: false },
     hit: null, // the obstacle that ended the run
     hitT: 0, // seconds since the hit
     knock: 0, // 0..1 eased knock-back after a hit (visual)
@@ -56,6 +57,8 @@ export function createSim(seed = 1, world = themeFor('01')) {
     events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start'
     obstacles: Array.from({ length: POOL }, () => ({ active: false, kind: 'wall', x: 0, dist: 0, id: 0 })),
     orbs: Array.from({ length: ORBS.pool }, () => ({ active: false, taken: false, takenT: 0, x: 0, y: 0, dist: 0, id: 0 })),
+    stars: 0, // set on completion: 1 to 3
+    doneT: 0, // seconds since crossing the line
     orbCount: 0, // orbs collected this run
     orbsSeen: 0, // orbs spawned this run
     auto: false, // Auto play: watch-only, the bot drives (see sim/bot.js)
@@ -74,11 +77,11 @@ export function startRun(sim, seed = sim.seed + 1, { auto = false } = {}) {
     lane: 1, queued: null, x: 0, vx: 0, laneFrom: 0, laneT: 1, y: 0, vy: 0, grounded: true,
     airT: 0, airTotal: 0, airP: 0, jumpBuf: 0, duck: 0, duckT: 0, landT: 0,
     anim: 'run', hit: null, hitT: 0, knock: 0, acc: 0,
-    gen: { n: 0, history: [], lastRow: null, lastPos: RUN.startSpeed * RUN.safeSeconds },
+    gen: { n: 0, history: [], lastRow: null, lastPos: RUN.startSpeed * RUN.safeSeconds, done: false },
   })
   for (const o of sim.obstacles) o.active = false
   for (const o of sim.orbs) { o.active = false; o.taken = false }
-  sim.orbCount = 0; sim.orbsSeen = 0
+  sim.orbCount = 0; sim.orbsSeen = 0; sim.stars = 0; sim.doneT = 0
   sim.events.length = 0
   emit(sim, 'start')
   fillObstacles(sim)
@@ -219,12 +222,15 @@ function placeOrbs(sim, prevRow, prevPos, row, pos) {
 
 function fillObstacles(sim) {
   const g = sim.gen
-  while (g.lastPos - sim.dist < RUN.spawnAhead) {
+  const limit = sim.world.finishDistance - LEVEL.clearance // nothing is placed closer to the finish line than this
+  while (g.lastPos - sim.dist < RUN.spawnAhead && !g.done) {
     const rows = nextPattern(g, sim.rand, difficulty(sim), sim.world.patternWeights)
     for (const { row, gap } of rows) {
       const prevRow = g.lastRow
       const prevPos = g.lastPos
-      g.lastPos += gap * speedAt(sim, g.lastPos)
+      const pos = prevPos + gap * speedAt(sim, prevPos)
+      if (pos > limit) { g.done = true; break } // the rest of the level is a clean run-in
+      g.lastPos = pos
       place(sim, row, g.lastPos)
       placeOrbs(sim, prevRow, prevPos, row, g.lastPos)
       g.history.push(sig(row)); if (g.history.length > 8) g.history.shift()
@@ -312,6 +318,11 @@ function stepOnce(sim, dt) {
       return
     }
   }
+  if (sim.dist >= sim.world.finishDistance) {
+    sim.phase = 'complete'; sim.anim = 'run'; sim.doneT = 0; sim.queued = null
+    sim.stars = starsFor(sim.orbCount, sim.orbsSeen)
+    emit(sim, 'complete')
+  }
 }
 
 /** Advance by `dt` seconds of real time using fixed sub-steps. */
@@ -320,6 +331,14 @@ export function update(sim, dt) {
   if (sim.phase === 'running') {
     sim.acc = (sim.acc ?? 0) + Math.min(dt, 0.05)
     while (sim.acc >= STEP && sim.phase === 'running') { if (sim.driver) sim.driver(sim); stepOnce(sim, STEP); sim.acc -= STEP }
+  } else if (sim.phase === 'complete') {
+    // coast to a stop past the line, then celebrate (the world keeps scrolling while she slows; nothing is left to hit)
+    const d = Math.min(dt, 0.05)
+    sim.doneT += d
+    sim.speed = Math.max(0, sim.speed - LEVEL.stopDecel * d)
+    sim.dist += sim.speed * d
+    if (!sim.grounded) { sim.vy -= PLAYER.gravityDown * d; sim.y = Math.max(0, sim.y + sim.vy * d); if (sim.y === 0) { sim.grounded = true; sim.vy = 0 } }
+    sim.anim = sim.speed > 2 || !sim.grounded ? 'run' : 'celebrate'
   } else if (sim.phase === 'gameover') {
     // the world stays where the collision happened; Aisha is knocked back (visual) and the speed readout winds down
     const d = Math.min(dt, 0.05)

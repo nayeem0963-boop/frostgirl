@@ -295,6 +295,98 @@ if (want('worlds')) {
   await ctx.close()
 }
 
+// ------------------------------------------------------------------ levels, stars, saved progress
+if (want('level')) {
+  const KEY = 'frost-runner-progress-v1'
+  const stored = (page) => S(page, (k) => { try { return JSON.parse(localStorage.getItem(k)) } catch { return 'unparsable' } }, KEY)
+  const nearFinish = (page, metres, orbs, seen) => S(page, ([m, o, n]) => { const s = window.__frostRunner.sim; for (const q of s.obstacles) q.active = false; s.gen.lastPos = 1e9; s.dist = s.world.finishDistance - m; s.orbCount = o; s.orbsSeen = n }, [metres, orbs, seen])
+  const { ctx, page, errors } = await open({ width: 1100, height: 560 })
+  check('start screen shows the world and the level length', /Frozen Kingdom\s*·\s*1500 m/.test(await page.getByTestId('level-info').innerText()))
+  await page.keyboard.press('Enter'); await sleep(500)
+  const bar0 = await S(page, () => { const b = document.querySelector('.runner-progress'); return b ? { now: Number(b.getAttribute('aria-valuenow')), max: Number(b.getAttribute('aria-valuemax')) } : null })
+  check('progress bar shows the level length', bar0 && bar0.max === 1500, JSON.stringify(bar0))
+  // a crash is saved as a best distance, not as a completion
+  await clear(page); await place(page, 'wall', 1, 10)
+  await page.waitForSelector('[data-screen="gameover"]', { timeout: 60000 })
+  let p = await stored(page)
+  check('a crash saves the best distance and no stars', p && p.worlds['01'] && p.worlds['01'].best >= 1 && p.worlds['01'].stars === 0 && p.worlds['01'].completed === false, JSON.stringify(p?.worlds?.['01']))
+  check('game-over panel shows progress through the level', /of 1500 m/.test(await page.locator('[data-screen="gameover"]').innerText()))
+  await page.keyboard.press('Enter'); await sleep(900)
+  // finishing: 3 stars with enough orbs
+  await clear(page)
+  await nearFinish(page, 60, 330, 380)
+  await page.waitForSelector('[data-screen="complete"]', { timeout: 90000 })
+  const done = await S(page, () => { const s = window.__frostRunner.sim; return { phase: s.phase, stars: s.stars, complete: s.count.complete } })
+  check('crossing the line completes the level (once)', done.phase === 'complete' && done.complete === 1, JSON.stringify(done))
+  const label = await page.locator('.runner-stars').getAttribute('aria-label')
+  check('level-complete panel shows 3 stars', label === '3 of 3 stars', label)
+  check('level-complete panel shows the orb count', /330\s*\/\s*380 orbs/.test(await page.locator('[data-screen="complete"]').innerText()))
+  p = await stored(page)
+  check('completion is saved: stars, completed, best', p.worlds['01'].stars === 3 && p.worlds['01'].completed === true && p.worlds['01'].best >= 1500, JSON.stringify(p.worlds['01']))
+  check('"Next world" leads to World 02', (await page.getByRole('link', { name: 'Next world' }).getAttribute('href')).includes('world=02'))
+  const celebrating = await S(page, () => window.__frostRunner.debug.pose)
+  check('Aisha celebrates after the line', celebrating === 'celebrate' || celebrating === 'run', celebrating)
+  await page.screenshot({ path: `${out}/13-level-complete.png` })
+  await page.keyboard.press('Enter'); await sleep(900)
+  const again = await sim(page)
+  check('"Play again" starts a fresh run', again.phase === 'running' && again.dist < 30)
+  // fewer orbs never lowers the saved stars
+  await clear(page); await nearFinish(page, 60, 10, 380)
+  await page.waitForSelector('[data-screen="complete"]', { timeout: 90000 })
+  p = await stored(page)
+  check('a worse finish keeps the 3 saved stars', p.worlds['01'].stars === 3, JSON.stringify(p.worlds['01']))
+  check('1 star for a finish with few orbs', (await page.locator('.runner-stars').getAttribute('aria-label')) === '1 of 3 stars')
+  // reload: the start screen remembers
+  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('after a reload the start screen shows the earned stars', (await page.locator('[data-testid="level-info"] .stars b.on').count()) === 3)
+  check('no page errors (levels)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('level')) {
+  // corrupt or hostile saved data must not break the game
+  const { ctx, page, errors } = await open({ width: 800, height: 450 })
+  await S(page, () => { localStorage.setItem('frost-runner-progress-v1', '{"version":1,"worlds":{"01":{"best":"lots","stars":99}}}') })
+  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('corrupt saved progress is ignored safely', (await page.getByTestId('level-info').isVisible()) && errors.length === 0, errors.slice(0, 2).join(' | '))
+  await S(page, () => { localStorage.setItem('frost-runner-progress-v1', 'not json at all') })
+  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('unparsable saved progress is ignored safely', await page.getByTestId('level-info').isVisible())
+  // Auto play finishes the level without touching the save
+  await S(page, () => { localStorage.removeItem('frost-runner-progress-v1') })
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(500)
+  await S(page, () => { const s = window.__frostRunner.sim; s.dist = s.world.finishDistance - 40; s.orbCount = 100; s.orbsSeen = 120 })
+  for (let i = 0; i < 4000 && (await sim(page)).phase !== 'complete'; i++) await realSleep(40)
+  check('Auto play can finish the level', (await sim(page)).phase === 'complete')
+  check('Auto play does not write progress', (await S(page, () => localStorage.getItem('frost-runner-progress-v1'))) === null)
+  for (let i = 0; i < 4000 && (await sim(page)).phase === 'complete'; i++) await realSleep(40)
+  check('Auto play starts another run by itself after the finish', (await sim(page)).phase === 'running')
+  await ctx.close()
+}
+
+if (want('level')) {
+  // the next world link works and the level-complete panel fits phones
+  for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
+    const { ctx, page } = await open(vp, true)
+    await page.getByRole('button', { name: 'Start run' }).tap(); await sleep(500)
+    await clear(page); await S(page, () => { const s = window.__frostRunner.sim; s.dist = s.world.finishDistance - 40; s.orbCount = 300; s.orbsSeen = 380 })
+    await page.waitForSelector('[data-screen="complete"]', { timeout: 90000 })
+    await sleep(400)
+    await page.screenshot({ path: `${out}/phone-${tag}-complete.png` })
+    const fit = await S(page, ([w, h]) => { const r = (el) => el.getBoundingClientRect(); const btns = [...document.querySelectorAll('[data-screen="complete"] .runner-btn')].map(r); return btns.every((b) => b.top >= 0 && b.bottom <= h && b.left >= 0 && b.right <= w) && btns.length >= 1 }, [vp.width, vp.height])
+    check(`[${tag}] level-complete buttons are fully on screen`, fit)
+    await page.getByRole('button', { name: 'Play again' }).tap(); await sleep(600)
+    check(`[${tag}] tap Play again restarts`, (await sim(page)).phase === 'running')
+    await ctx.close()
+  }
+  const { ctx, page } = await open({ width: 800, height: 450 })
+  await page.goto(`${base}/?game=frost&debug&world=02`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('World 02 start screen shows its name and 1500 m', /Whispering Ice Forest\s*·\s*1500 m/.test(await page.getByTestId('level-info').innerText()))
+  await page.goto(`${base}/?game=frost&debug&world=03`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('World 03 start screen shows its name and 1600 m', /Crystal Mountains\s*·\s*1600 m/.test(await page.getByTestId('level-info').innerText()))
+  await ctx.close()
+}
+
 // ------------------------------------------------------------------ phone portrait: swipes
 async function phone(viewport, tag) {
   const { ctx, page, errors } = await open(viewport, true)
