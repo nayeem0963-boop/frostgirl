@@ -623,6 +623,61 @@ if (want('hole')) {
   await ctx.close()
 }
 
+// ------------------------------------------------------------------ World 05: dream mist (Phase 5.4)
+if (want('mist')) {
+  const fog = (page) => S(page, () => { const s = window.__frostRunner.sim; const f = window.__frostRunner.debug.scene.fog; return { mist: s.mist, near: f.near, far: f.far, vision: s.vision, color: f.color.getHexString(), dist: s.dist, phase: s.phase } })
+  // move the run to a distance with a clean slate ahead (obstacles regenerate normally from there)
+  const goTo = (page, d) => S(page, (d) => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; for (const q of s.orbs) q.active = false; s.dist = d; s.gen.lastPos = d + 30 }, d)
+  const { ctx, page, errors } = await open({ width: 960, height: 540 }, false, '&world=05&unlock=all')
+  await page.keyboard.press('Enter'); await sleep(500)
+  const clear0 = await fog(page)
+  check('World 05 starts with clear air (the normal fog range)', clear0.mist === 0 && clear0.far === 520 && clear0.near === 70, JSON.stringify(clear0))
+  await goTo(page, 220); await sleep(500)
+  const thick = await fog(page)
+  check('inside a mist bank the fog closes in to 10-50 m', thick.mist > 0.99 && Math.abs(thick.far - 50) < 1 && Math.abs(thick.near - 10) < 0.5, `${thick.near.toFixed(0)}-${thick.far.toFixed(0)} m at ${thick.dist.toFixed(0)} m`)
+  check('the mist tints the fog', thick.color !== clear0.color, `${clear0.color} -> ${thick.color}`)
+  check('what can be seen is limited to about 40 m', Math.abs(thick.vision - 40) < 1.5, `${thick.vision.toFixed(1)} m`)
+  await page.screenshot({ path: `${out}/24-mist.png` })
+  await S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'wall', lane: 1, side: 0, x: 0, dist: s.dist + 16, id: 5252 }) })
+  await sleep(200)
+  await page.screenshot({ path: `${out}/25-mist-wall-16m.png` })
+  await goTo(page, 340); await sleep(500)
+  const after = await fog(page)
+  check('after the bank the air clears again', after.mist === 0 && after.far === 520, JSON.stringify(after))
+  await goTo(page, 1700); await sleep(500)
+  check('the approach to the finish line is clear', (await fog(page)).mist === 0)
+  check('no page errors (mist)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('mist')) {
+  // Auto play drives through a whole mist bank (it only reacts to what the fog lets it see)
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=05&unlock=all')
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  await S(page, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; for (const q of s.orbs) q.active = false; s.dist = 150; s.gen.lastPos = 180 })
+  let peak = 0, minFar = 520, last = { ph: 'running', d: 0 }
+  for (let i = 0; i < 12000; i++) {
+    last = await S(page, () => { const s = window.__frostRunner.sim; return { ph: s.phase, d: s.dist, m: s.mist, far: window.__frostRunner.debug.scene.fog.far } })
+    peak = Math.max(peak, last.m); minFar = Math.min(minFar, last.far)
+    if (last.d >= 310 || last.ph !== 'running') break
+    await realSleep(60)
+  }
+  check('Auto play drives through a whole mist bank (150 to 310 m)', last.ph === 'running' && last.d >= 310, `reached ${last.d.toFixed(0)} m, thickest mist ${peak.toFixed(2)}, fog down to ${minFar.toFixed(0)} m`)
+  check('the mist really was thick on the way', peak > 0.99 && minFar < 51)
+  check('no page errors (World 05 Auto play)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+  // the other worlds are never misty, wherever you are
+  for (const id of ['01', '04']) {
+    const { ctx: c2, page: p2 } = await open({ width: 640, height: 360 }, false, `&world=${id}&unlock=all`)
+    await p2.keyboard.press('Enter'); await sleep(400)
+    await S(p2, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; s.dist = 220; s.gen.lastPos = 250 })
+    await sleep(400)
+    const f = await S(p2, () => ({ m: window.__frostRunner.sim.mist, far: window.__frostRunner.debug.scene.fog.far }))
+    check(`[world ${id}] has no mist even at 220 m`, f.m === 0 && f.far === 520, JSON.stringify(f))
+    await c2.close()
+  }
+}
+
 // ------------------------------------------------------------------ phone portrait: swipes
 async function phone(viewport, tag) {
   const { ctx, page, errors } = await open(viewport, true)

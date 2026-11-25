@@ -1,3 +1,25 @@
+# Frost — Phase 5.4: World 05's dream mist
+
+**Frosted Dream Desert** gets banks of dream mist. The signature hazard here is *visibility*, not another obstacle (a slow snow drift was
+considered and dropped: slowing you down has no fail state). While a bank passes, the fog closes in from 70-520 m to **10-50 m** and
+takes a lilac tint, the painted backdrop fades out, and obstacles show late: at full mist something 12 m away is still 96% visible and
+you can see about 40 m ahead.
+
+- **Pure and predictable** (`sim/mist.js`): the mist is a function of the distance run (`mistAt`), so it is the same on every attempt and fully
+  testable. Data in `runnerThemes.js`: `mist: { startAt: 160, period: 340, length: 130, ramp: 30, near: 10, far: 50 }`: banks at 160-290,
+  500-630, 840-970, 1180-1310, 1520-1650 m; each thickens and clears smoothly over 30 m; the opening stretch and the last 150 m before the
+  finish are always clear (unit-tested for every world with mist).
+- **Fairness is measured**: at the distance needed to dodge at top speed (`(REACTION + 2 x SHIFT_TIME) x 12.5` = 11.6 m) an obstacle is at
+  least 95% visible; vision in full mist (40 m) is 3.4 times that. **The Auto play bot only reacts to what the fog lets it see**
+  (`sim.vision`), and it finishes World 05 on 4 seeds, and on 2 more even when its vision is cut to 16 m (1.4 times the dodge distance).
+- **Rendering** (`MistFog` in `RunnerGame.jsx`, `Backdrop.jsx`): the scene's fog range, fog colour and background follow `sim.mist` every
+  frame; the backdrop painting's opacity falls with it. No new asset or draw call.
+- Only World 05 has mist; Worlds 01 to 04 are unchanged (tested in the browser too).
+
+Not done: no wind sound, no drifting mist particles, and the sky shader itself does not thicken (only the ground, trees and painting do).
+
+---
+
 # Frost — Phase 5.3: World 04's cracking ice
 
 **Frozen Ocean** gets holes in the ice, the first hazard you can also *jump*: a lane shows cracks and a faint cyan column of light from

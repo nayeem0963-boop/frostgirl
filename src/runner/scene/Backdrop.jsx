@@ -2,7 +2,8 @@
 // portrait scenes with a road down the middle, so only their TOP part (sky, aurora, castles, trees) is used, mirrored across
 // the width and faded into the sky above and the fog below. World 1 keeps the 3D mountain massif and never mounts this.
 import { useTexture } from '@react-three/drei'
-import { useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { useMemo, useRef } from 'react'
 import { CanvasTexture, ClampToEdgeWrapping, MirroredRepeatWrapping, SRGBColorSpace } from 'three'
 
 const DISTANCE = 520
@@ -19,7 +20,7 @@ function fadeTexture() {
   return t
 }
 
-export function Backdrop({ url, crop = 0.42 }) {
+export function Backdrop({ url, crop = 0.42, sim = null }) {
   const painting = useTexture(url)
   const { map, fade, width, repeat } = useMemo(() => {
     const map = painting.clone()
@@ -34,10 +35,12 @@ export function Backdrop({ url, crop = 0.42 }) {
     return { map, fade: fadeTexture(), width, repeat }
   }, [painting, crop])
   void repeat
+  const matRef = useRef()
+  useFrame(() => { if (sim && matRef.current) matRef.current.opacity = 0.95 * (1 - 0.8 * sim.current.mist) }) // the painting fades into the mist (World 05)
   return (
     <mesh position={[0, HEIGHT / 2 - 6, -DISTANCE]} frustumCulled={false} renderOrder={-1}>
       <planeGeometry args={[width, HEIGHT]} />
-      <meshBasicMaterial map={map} alphaMap={fade} transparent depthWrite={false} fog={false} opacity={0.95} toneMapped={false} />
+      <meshBasicMaterial ref={matRef} map={map} alphaMap={fade} transparent depthWrite={false} fog={false} opacity={0.95} toneMapped={false} />
     </mesh>
   )
 }
