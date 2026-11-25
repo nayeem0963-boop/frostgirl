@@ -1,3 +1,30 @@
+# Frost — Phase 5.5: World 06's aurora gusts
+
+World 06 "Sky of Aurora" gets its signature hazard: **wind gusts**. Unlike the wolf, shard and hole, a gust never kills.
+It shoves Aisha one lane sideways as she crosses a gust line, so it is a displacement/difficulty effect: it can push her
+toward an obstacle she had lined up to avoid. (If a harsher version is wanted, that is a one-constant change in the config.)
+
+- **Data**: `gust: { startAt: 150, period: 200, jitter: 40 }` in `src/worlds/runnerThemes.js` (World 06 only; every other
+  world has `gust: null`). `GUST = { pre: 3, post: 16, warn: 80, glide: 1 }` in `src/runner/config.js`.
+- **Sim** (`src/runner/sim/gust.js`): gust `k` sits at `startAt + k*period + hash(k)*jitter` and blows left or right from a
+  hash of `k`, so a seed-free, deterministic but irregular sequence. When the runner crosses the line the lane changes by
+  one (nothing happens at an edge lane) with the normal smooth lane glide, and a `gust` event is emitted.
+- **Fairness**: the generator keeps every obstacle row out of the window from 3 m before to 16 m after a gust line
+  (`avoidGust`), so after being shoved there is always at least the 0.93 s needed to react (16 m is about 1.28 s at top speed).
+- **Telegraph** (`scene/Gusts.jsx`): a chevron decal on the ground shows the direction from 80 m away, and instanced wind
+  streaks build up before the line and fade after. One instanced mesh each, so the draw-call cost is small.
+- **Auto play** reads the lane after the shove like any other state and finishes the whole level on four seeds.
+
+## Tests (run here)
+- `npm test`: 179/179 (new `tests/gust.test.js`, 9 tests: determinism, irregular spacing, last gust before the finish,
+  recovery window, lane shove incl. edge lanes, generator keeps rows out of windows on 6 seeds, gusts only in World 06,
+  bot finishes World 06 on seeds 71-74).
+- `ONLY=gust node scripts/runner-e2e.mjs <url>`: 9/9 (no push before the line, one-lane shove after it, run keeps going,
+  Auto play 40 s through World 06, World 01 has no gusts). Software-rendered headless Chrome.
+- `node scripts/runner-perf.mjs <url> --budget --world=06`: gust line in view 23 draw calls / 231k triangles on desktop,
+  22 / 187k on phone portrait; within the budget. These are renderer counts, not real-device frame rates (not measured).
+- The chevron decal is faint in headless stills; the wind streaks are clearly visible. Worth a look on a real phone.
+
 # Frost — Phase 5.4: World 05's dream mist
 
 **Frosted Dream Desert** gets banks of dream mist. The signature hazard here is *visibility*, not another obstacle (a slow snow drift was

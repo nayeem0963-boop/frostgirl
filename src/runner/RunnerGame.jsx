@@ -11,6 +11,7 @@ import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
 import { FinishGate } from './scene/FinishGate.jsx'
 import { Wolves } from './scene/Wolves.jsx'
+import { Gusts } from './scene/Gusts.jsx'
 import { fogAt } from './sim/mist.js'
 import { pickWorld, unlockAllRequested } from './worlds.js'
 import { loadProgress, saveProgress, recordRun, nextWorldId, describeWorlds } from './progress.js'
@@ -177,6 +178,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
       <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} debug={debug} />
       {t.mist && <MistFog sim={sim} theme={t} />}
+      {t.gust && <Gusts sim={sim} gust={t.gust} />}
       <Sky colors={t.sky} />
       <Ground sim={sim} theme={t} />
       <Obstacles sim={sim} />

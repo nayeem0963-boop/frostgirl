@@ -3,7 +3,7 @@
 import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD, HOLE } from '../config.js'
 import { starsFor } from '../progress.js'
 import { mistAt, fogAt, visionRange } from './mist.js'
-import { gustAt, nextGustIndex, avoidGust } from './gust.js'
+import { gustAt, avoidGust } from './gust.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
 

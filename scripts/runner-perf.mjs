@@ -25,6 +25,7 @@ async function measure(name, viewport, mobile) {
   const gt = async (sec) => { const t0 = await page.evaluate(() => window.__frostRunner.sim.time); const end = Date.now() + 120000; while (Date.now() < end) { const t = await page.evaluate(() => { const s = window.__frostRunner.sim; if (s.phase !== 'running') throw new Error('run ended during measurement'); return s.time }); if (t - t0 >= sec) return; await sleep(25) } }
   // park Aisha in the right lane and keep walls (left lane only), a fallen pine and an arch coming so the obstacle meshes are on screen
   const keepBusy = () => page.evaluate(() => { const s = window.__frostRunner.sim; for (const o of s.obstacles) if (o.active && (o.kind !== 'wall' || o.x !== -2.2)) o.active = false; s.gen.lastPos = s.dist + 500
+    if (s.world.gust && s.lane !== 2) { s.lane = 2; s.x = 2.2; s.laneFrom = 2.2; s.laneT = 1; s.queued = null } // a gust may have pushed her toward the wall lane: put her back
     const live = s.obstacles.filter((o) => o.active).length; if (live < 6) for (let i = 0; i < 6 - live; i++) { const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'wall', x: -2.2, dist: s.dist + 25 + i * 14, id: 5000 + Math.random() }) } })
   await page.evaluate(() => { window.__frostRunner.command('right'); })
   await keepBusy()
@@ -88,6 +89,12 @@ async function measure(name, viewport, mobile) {
       put(0, 14, 9301); put(1, 22, 9302); put(2, 40, 9303)
       await frames(3)
       out.push(await read('everything, holes in view'))
+    }
+    if (sm.world.gust) { // World 06: sit just before a gust line so the chevrons and wind streaks are all in view
+      sm.dist = sm.world.gust.startAt - 12; sm.gen.lastPos = 1e9
+      for (const o of sm.obstacles) o.active = false
+      await frames(3)
+      out.push(await read('everything, gust line in view'))
     }
     { const q = window.__frostRunner.sim; q.dist = savedDist; q.phase = 'running'; q.gen.lastPos = q.dist + 20; for (const o of q.obstacles) o.active = false }
     d.gl.info.autoReset = true
