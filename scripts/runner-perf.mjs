@@ -73,6 +73,14 @@ async function measure(name, viewport, mobile) {
       await frames(3)
       out.push(await read('everything, wolves in view'))
     }
+    if (sm.world.hazards?.shard) { // World 03: two shards, one mid-fall and one landed, with their warnings
+      sm.dist = 0; sm.gen.lastPos = 1e9
+      for (const o of sm.obstacles) o.active = false
+      const put = (lane, ahead, id) => { const o = sm.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'shard', lane, side: 0, dist: sm.dist + ahead, id, x: [-2.2, 0, 2.2][lane] }) }
+      put(0, 22, 9201); put(2, 44, 9202)
+      await frames(3)
+      out.push(await read('everything, shards in view'))
+    }
     { const q = window.__frostRunner.sim; q.dist = savedDist; q.phase = 'running'; q.gen.lastPos = q.dist + 20; for (const o of q.obstacles) o.active = false }
     d.gl.info.autoReset = true
     const i = d.gl.info

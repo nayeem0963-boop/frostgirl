@@ -35,6 +35,7 @@ export const OBSTACLES = {
   wall: { halfW: 0.95, halfD: 0.45, y0: 0, y1: 2.4 }, // one lane, full height: switch lanes
   ridge: { halfW: LANE_WIDTH * 1.5, halfD: 0.4, y0: 0, y1: 0.8 }, // all lanes, low: jump
   arch: { halfW: LANE_WIDTH * 1.5, halfD: 0.4, y0: 1.4, y1: 2.8 }, // all lanes, overhead: duck (head top ducked 1.2 m)
+  shard: { halfW: 0.75, halfD: 0.5, y0: 0, y1: 2.0 }, // World 03: a fallen crystal spire, one lane, 2 m high (above a jump's 1.7 m apex): switch lanes
   wolf: { halfW: 0.5, halfD: 0.6, y0: 0, y1: 1.0 }, // World 02: one lane, 1 m high: switch lanes or jump it (wolf.glb is scaled to 0.8 = 1.3 m)
 }
 
@@ -74,3 +75,8 @@ export const WOLF = {
   lungeTo: 14, // ... and is in its lane
   scale: 0.8, // 1.3 m tall, 1.5 m long (the collider is a little smaller: 1.0 m high, 1.2 m long)
 }
+
+// World 03's crystal shard: a glowing marker shows its lane from far away, the spire falls while it is dropFrom..landAt metres
+// ahead of Aisha and has landed landAt metres before her (16 m = 1.28 s at top speed: more than the generator's worst case,
+// patterns.js REACTION + 2 shifts). Its collider is static: nothing can touch it while it is still falling, it is 16+ m away.
+export const SHARD = { dropFrom: 34, landAt: 16, height: 18 }

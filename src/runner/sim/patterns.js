@@ -6,11 +6,11 @@
 //   needed time = REACTION + lane shifts * SHIFT_TIME.
 export const REACTION = 0.45
 export const SHIFT_TIME = 0.24
-export const ACTION_RECOVER = { wall: 0, wolf: 0, ridge: 1.15, arch: 1.1 } // min seconds between an action row and the next row
+export const ACTION_RECOVER = { wall: 0, wolf: 0, shard: 0, ridge: 1.15, arch: 1.1 } // min seconds between an action row and the next row
 
 const ALL = [0, 1, 2]
-/** Lanes a row leaves open: walls and wolves block their lanes, ridges and arches (jump / duck rows) block none. */
-export const blocksLanes = (row) => row.kind === 'wall' || row.kind === 'wolf'
+/** Lanes a row leaves open: walls, wolves and crystal shards block their lanes, ridges and arches (jump / duck rows) block none. */
+export const blocksLanes = (row) => row.kind === 'wall' || row.kind === 'wolf' || row.kind === 'shard'
 export const openLanes = (row) => (blocksLanes(row) ? ALL.filter((l) => !row.lanes.includes(l)) : ALL)
 const needsAction = (row) => row.kind !== 'wall'
 
@@ -61,6 +61,9 @@ function patterns(r, d, n, last, w = {}) {
   opt('wolf', d > 0.06 && n > 2 ? 2 : 0, () => { const l = lane(); return [{ kind: 'wolf', lanes: [l], side: sideOf(l) }] })
   opt('wolfWall', d > 0.2 ? 1.6 : 0, () => { const a = lane(); const b = pick(ALL.filter((l) => l !== a)); return [{ kind: 'wolf', lanes: [a], side: sideOf(a) }, { kind: 'wall', lanes: [b] }] })
   opt('wolfPair', d > 0.4 ? 1.3 : 0, () => { const open = lane(); return [{ kind: 'wolf', lanes: ALL.filter((l) => l !== open), side: sideOf(1) }] }) // two wolves side by side, one lane open
+  opt('shard', d > 0.06 && n > 2 ? 2 : 0, () => [{ kind: 'shard', lanes: [lane()] }])
+  opt('shardWall', d > 0.2 ? 1.6 : 0, () => { const a = lane(); const b = pick(ALL.filter((l) => l !== a)); return [{ kind: 'shard', lanes: [a] }, { kind: 'wall', lanes: [b] }] })
+  opt('shardPair', d > 0.4 ? 1.3 : 0, () => { const open = lane(); return [{ kind: 'shard', lanes: ALL.filter((l) => l !== open) }] }) // two spires side by side, one lane open
   void last
   return list
 }

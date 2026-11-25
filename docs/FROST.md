@@ -1,3 +1,23 @@
+# Frost — Phase 5.2: World 03's crystal shards
+
+**Crystal Mountains** gets falling crystal spires. A pulsing ring and a tall beam of light mark a lane from far away; the spire falls
+while it is 34 to 16 m ahead of Aisha (`shardFall`, `SHARD` in `config.js`) and has landed 16 m before her, which is 1.28 s at top speed:
+more than the generator's worst case for two lane changes (0.93 s, unit-tested). It then blocks that lane (collider 1.5 m wide,
+**2 m high, above a jump's 1.7 m apex: it can only be dodged**); it is drawn taller (3 m) than the collider, which only ever favours the player.
+
+- **The collider is static**: the fall happens while the shard is 16+ m away, so only the visuals animate (`scene/Obstacles.jsx`:
+  fall, tilt and spin, the footprint appears on landing, the warning ring and beam disappear on landing).
+- **Generator**: shards count as lane blockers for every fairness rule; patterns `shard`, `shardWall`, `shardPair` are opt-in
+  (a world's weight is a number, missing = never). Only World 03 turns them on (`hazards: { shard: true }` in `runnerThemes.js`),
+  so Worlds 01 and 02 are unchanged (their row pins and wolf tests still pass).
+- **Auto play** treats a shard like a wall; the bot finishes World 03 on 4 seeds and meets 10+ shards per level (`tests/shard.test.js`).
+- Game-over text: "Crushed by a crystal". No new draw calls beyond three instanced meshes (spire, ring, beam).
+
+Not done: no impact sound or screen shake on landing, no glass-break particles; shards do not yet fall *near* Aisha (they are
+always telegraphed 16+ m ahead on purpose).
+
+---
+
 # Frost — Phase 5.1: World 02's wolf
 
 Phase 5 gives each world a signature hazard, one PR per world. **Whispering Ice Forest** gets the wolf (`public/assets/expedition/wolf.glb`:

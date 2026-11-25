@@ -8,7 +8,7 @@
 //   patternWeights      multipliers (default 1) per obstacle pattern, see PATTERNS in src/runner/sim/patterns.js
 //   finishDistance      metres to finish the level; difficultySeconds: run time until the generator is at full difficulty
 
-export const PATTERN_IDS = ['wall1', 'wall2', 'ridge', 'arch', 'slalom', 'wallRidge', 'archWall', 'zigzag', 'wolf', 'wolfWall', 'wolfPair']
+export const PATTERN_IDS = ['wall1', 'wall2', 'ridge', 'arch', 'slalom', 'wallRidge', 'archWall', 'zigzag', 'wolf', 'wolfWall', 'wolfPair', 'shard', 'shardWall', 'shardPair']
 // `hazards`: signature hazards a world turns on (each needs its pattern weights too, see sim/patterns.js `opt`)
 
 const WORLD_1 = {
@@ -60,7 +60,8 @@ export const runnerThemes = {
     ground: { base: '#eef3ff', speck: [175, 190, 235] },
     trail: { base: '#d2dcf2', speck: [155, 170, 215], shade: [125, 140, 210], divider: [90, 105, 200], rail: [75, 90, 190] },
     backdrop: { crop: 0.42 },
-    patternWeights: { ridge: 1.4, archWall: 1.3 },
+    hazards: { shard: true }, // crystal spires fall into lanes (a marker shows the lane first)
+    patternWeights: { ridge: 1.4, archWall: 1.3, shard: 1.6, shardWall: 1.0, shardPair: 0.8 },
     finishDistance: 1600,
   }),
   // Frozen Ocean: glassy cyan, wide open -> arches and wall+ridge

@@ -4,11 +4,11 @@ import { useFrame } from '@react-three/fiber'
 import { useMemo } from 'react'
 import {
   BoxGeometry, BufferAttribute, Color, ConeGeometry, CylinderGeometry, InstancedMesh, MeshStandardMaterial,
-  Object3D, SphereGeometry, PlaneGeometry, CanvasTexture, MeshBasicMaterial, SRGBColorSpace, DoubleSide,
+  Object3D, SphereGeometry, PlaneGeometry, CanvasTexture, MeshBasicMaterial, SRGBColorSpace, DoubleSide, AdditiveBlending,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { LANES, OBSTACLES } from '../config.js'
-import { POOL } from '../sim/sim.js'
+import { LANES, OBSTACLES, SHARD } from '../config.js'
+import { POOL, shardFall } from '../sim/sim.js'
 
 const _o = new Object3D()
 function part(geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
@@ -68,6 +68,29 @@ function iceArch() {
   return mergeGeometries(parts)
 }
 
+// World 03's crystal spire cluster (collider: 1.5 m wide, 2 m high, see OBSTACLES.shard). It falls from SHARD.height to the ground.
+function crystalSpire() {
+  const d = OBSTACLES.shard
+  const h = d.y1 * 1.5 // drawn taller than its 2 m collider: easier to read, and never unfair (the collider is the smaller one)
+  return mergeGeometries([
+    part(new ConeGeometry(0.62, h, 6), '#8678f2', 0, h / 2, 0),
+    part(new ConeGeometry(0.34, h * 0.62, 5), '#b8acff', -0.46, h * 0.31, 0.1, 0, 0, 0.18),
+    part(new ConeGeometry(0.3, h * 0.5, 5), '#d3cbff', 0.46, h * 0.25, -0.08, 0, 0, -0.2),
+    part(new BoxGeometry(1.5, 0.24, 1.0), '#4f44c4', 0, 0.12, 0), // dark base slab
+  ])
+}
+
+// The warning ring where a shard will land: shown from far away, pulsing, until it has landed.
+function ringTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 128
+  const g = c.getContext('2d')
+  const gr = g.createRadialGradient(64, 64, 14, 64, 64, 62)
+  gr.addColorStop(0, 'rgba(160,140,255,0.15)'); gr.addColorStop(0.7, 'rgba(170,150,255,0.55)'); gr.addColorStop(0.86, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, 'rgba(160,140,255,0)')
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128)
+  const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace
+  return t
+}
+
 // Ground telegraphs: amber chevrons pointing up = jump, blue chevrons pointing down = duck, laid in every lane 8 m before the obstacle.
 function chevronTexture(up, color) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128
@@ -96,7 +119,7 @@ function softTexture() {
   return t
 }
 
-const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9], wolf: [1.9, 2.0] } // footprint under each obstacle
+const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9], wolf: [1.9, 2.0], shard: [2.1, 1.8] } // footprint under each obstacle
 const MARK_AHEAD = 8
 
 export function Obstacles({ sim }) {
@@ -105,7 +128,7 @@ export function Obstacles({ sim }) {
       vertexColors: true, roughness: 0.22, metalness: 0.05, flatShading: true,
       emissive: new Color('#2f78b8'), emissiveIntensity: 0.5,
     })
-    const geos = { wall: iceWall(), ridge: fallenPine(), arch: iceArch() }
+    const geos = { wall: iceWall(), ridge: fallenPine(), arch: iceArch(), shard: crystalSpire() }
     const meshes = {}
     const group = new Object3D()
     for (const [k, geo] of Object.entries(geos)) {
@@ -120,24 +143,37 @@ export function Obstacles({ sim }) {
     const marks = {
       ridge: new InstancedMesh(flat, markMat(chevronTexture(true, '#ff9d1c')), POOL),
       arch: new InstancedMesh(flat, markMat(chevronTexture(false, '#1f78d1')), POOL),
+      beam: new InstancedMesh(new BoxGeometry(0.5, 16, 0.5).translate(0, 8, 0), new MeshBasicMaterial({ color: '#9a86ff', transparent: true, opacity: 0.3, blending: AdditiveBlending, depthWrite: false }), POOL),
+      shard: new InstancedMesh(flat, new MeshBasicMaterial({ map: ringTexture(), transparent: true, depthWrite: false, blending: AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -3, side: DoubleSide }), POOL),
     }
     const shadow = new InstancedMesh(flat, markMat(softTexture()), POOL)
     for (const m of [...Object.values(marks), shadow]) { m.frustumCulled = false; m.count = 0; m.renderOrder = 1; group.add(m) }
     return { group, meshes, marks, shadow }
   }, [])
   const tmp = useMemo(() => new Object3D(), [])
-  useFrame(() => {
+  useFrame(({ clock }) => {
     const s = sim.current
-    const n = { wall: 0, ridge: 0, arch: 0, wolf: 0 }
+    const n = { wall: 0, ridge: 0, arch: 0, wolf: 0, shard: 0 }
     let sh = 0
     const span = LANES[2] * 2 + 2.2
     for (const o of s.obstacles) {
       if (!o.active) continue
-      const z = -(o.dist - s.dist)
+      const ahead = o.dist - s.dist
+      const z = -ahead
       tmp.position.set(o.x, 0, z)
+      tmp.rotation.set(0, 0, 0)
       tmp.scale.set(1, 1, 1)
+      let landed = true
+      if (o.kind === 'shard') { // falls from the sky while 34 -> 16 m ahead, tilting and turning, then stands
+        const p = shardFall(ahead)
+        landed = p >= 1
+        tmp.position.y = SHARD.height * (1 - p * p)
+        tmp.rotation.set(0, p * 5, (1 - p) * 0.4)
+      }
       tmp.updateMatrix()
       if (meshes[o.kind]) meshes[o.kind].setMatrixAt(n[o.kind]++, tmp.matrix) // (a wolf has no instanced mesh: scene/Wolves.jsx draws it)
+      if (!landed) continue // no footprint under a falling shard
+      tmp.rotation.set(0, 0, 0)
       const [w, d] = SHADOW[o.kind]
       tmp.position.set(o.x, 0.03, z)
       tmp.scale.set(w, 1, d)
@@ -146,10 +182,26 @@ export function Obstacles({ sim }) {
     }
     for (const k in meshes) { meshes[k].count = n[k]; meshes[k].instanceMatrix.needsUpdate = true }
     shadow.count = sh; shadow.instanceMatrix.needsUpdate = true
-    let mr = 0, ma = 0
+    let mr = 0, ma = 0, ms = 0, mb = 0
     for (const o of s.obstacles) {
       if (!o.active || o.kind === 'wall' || o.kind === 'wolf') continue
-      tmp.position.set(0, 0.035, -(o.dist - s.dist) - MARK_AHEAD)
+      const ahead = o.dist - s.dist
+      if (o.kind === 'shard') { // pulsing ring on the lane, until the spire has landed
+        if (shardFall(ahead) >= 1) continue
+        const pulse = 3.6 * (0.92 + 0.12 * Math.sin(clock.elapsedTime * 7 + o.id))
+        tmp.rotation.set(0, 0, 0)
+        tmp.position.set(o.x, 0.04, -ahead)
+        tmp.scale.set(pulse, 1, pulse)
+        tmp.updateMatrix()
+        marks.shard.setMatrixAt(ms++, tmp.matrix)
+        tmp.position.set(o.x, 0, -ahead) // and a tall beam of light over the lane, readable from far away
+        tmp.scale.set(1, 1, 1)
+        tmp.updateMatrix()
+        marks.beam.setMatrixAt(mb++, tmp.matrix)
+        continue
+      }
+      tmp.rotation.set(0, 0, 0)
+      tmp.position.set(0, 0.035, -ahead - MARK_AHEAD)
       tmp.scale.set(span, 1, 2.6)
       tmp.updateMatrix()
       if (o.kind === 'ridge') marks.ridge.setMatrixAt(mr++, tmp.matrix)
@@ -157,6 +209,8 @@ export function Obstacles({ sim }) {
     }
     marks.ridge.count = mr; marks.ridge.instanceMatrix.needsUpdate = true
     marks.arch.count = ma; marks.arch.instanceMatrix.needsUpdate = true
+    marks.shard.count = ms; marks.shard.instanceMatrix.needsUpdate = true
+    marks.beam.count = mb; marks.beam.instanceMatrix.needsUpdate = true
   })
   return <primitive object={group} />
 }

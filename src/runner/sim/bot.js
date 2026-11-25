@@ -3,9 +3,9 @@
 import { command, aheadOf } from './sim.js'
 import { LANES } from '../config.js'
 
-// walls and wolves block one lane; a wolf's x is still moving while it lunges, so its lane is stored on it
+// walls, wolves and crystal shards block one lane; a wolf's x is still moving while it lunges, so its lane is stored on it
 const laneOf = (o) => o.lane ?? LANES.indexOf(o.x)
-const blocksLane = (o) => o.kind === 'wall' || o.kind === 'wolf'
+const blocksLane = (o) => o.kind === 'wall' || o.kind === 'wolf' || o.kind === 'shard'
 
 export function createBot() {
   return { done: new Set() } // rows already acted on
