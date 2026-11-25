@@ -36,3 +36,27 @@
   .runner-help { margin-top: 6px; line-height: 1.35; }
   .runner-btn { min-height: 44px; }
 }
+
+/* game over: soft ice-blue edge flash on impact (kept off the centre, so the scene stays readable), then the panel fades in */
+.runner-flash {
+  position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 90px 24px rgba(170, 225, 255, 0.55);
+  animation: runner-flash 0.7s ease-out forwards;
+}
+@keyframes runner-flash { from { opacity: 1; } to { opacity: 0; } }
+.runner-over {
+  /* the panel sits in the upper part; the lower half (Aisha, the obstacle she hit) stays clear and visible */
+  justify-content: flex-start; padding-top: clamp(14px, 6vh, 56px);
+  background: linear-gradient(rgba(10, 25, 55, 0.72), rgba(10, 25, 55, 0.5) 52%, rgba(10, 25, 55, 0) 72%);
+  animation: runner-fade 0.35s ease-out both;
+}
+@keyframes runner-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.runner-label { margin: 6px 0 0; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.85; }
+.runner-final { margin: 0; font-size: clamp(54px, 15vw, 96px); font-weight: 800; line-height: 1; }
+.runner-final small { font-size: 0.38em; font-weight: 600; opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) { .runner-flash { animation: none; opacity: 0; } .runner-over { animation: none; } }
+@media (max-height: 460px) {
+  /* short landscape: a column on the left, the run stays visible on the right */
+  .runner-over { justify-content: center; align-items: flex-start; padding: 0 0 0 5vw; width: 46vw; right: auto;
+    background: linear-gradient(90deg, rgba(10, 25, 55, 0.75), rgba(10, 25, 55, 0.55) 70%, rgba(10, 25, 55, 0)); text-align: left; }
+  .runner-final { font-size: 52px; } .runner-over h2 { font-size: 24px; } .runner-over .runner-hint, .runner-over .runner-label { display: none; }
+}

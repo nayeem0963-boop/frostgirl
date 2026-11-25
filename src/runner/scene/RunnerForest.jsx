@@ -5,14 +5,16 @@
 import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useMemo } from 'react'
-import { DoubleSide, Group, InstancedMesh, Matrix4, Object3D } from 'three'
+import { DoubleSide, Group, InstancedMesh, Object3D } from 'three'
 import { ASSETS } from '../../expedition/assets.js'
 import { SLOTS_PER_SIDE, VARIANTS, groundY, slotAhead, treeAt } from './scenery.js'
 
-const LOD_NEAR = 38 // metres ahead of the camera: LOD0 (~8k tris) / LOD1 (~1.5k) / LOD2 (~200)
-const LOD_MID = 95
+// metres ahead of Aisha: LOD0 (~8k tris) up to NEAR, LOD1 (~1.5k) up to MID, LOD2 (~200) beyond. Phones get tighter ranges.
+const LODS = { high: [30, 90], low: [16, 60] }
+const BEHIND_CAMERA = 9 // the camera sits ~6 m behind Aisha: trees further back are never drawn
 
-export function RunnerForest({ sim }) {
+export function RunnerForest({ sim, quality }) {
+  const [LOD_NEAR, LOD_MID] = LODS[quality] ?? LODS.high
   const { scene } = useGLTF(ASSETS.spruces)
 
   const forest = useMemo(() => {
@@ -34,6 +36,7 @@ export function RunnerForest({ sim }) {
     material.color.setScalar(1.18) // the baked scan is dark
 
     const group = new Group()
+    group.name = 'forest'
     const meshes = {}
     const total = SLOTS_PER_SIDE * 2
     for (const v of VARIANTS) {
@@ -50,7 +53,6 @@ export function RunnerForest({ sim }) {
   }, [scene])
 
   const tmp = useMemo(() => new Object3D(), [])
-  const mat = useMemo(() => new Matrix4(), [])
 
   useFrame(() => {
     const { meshes, slots, counts } = forest
@@ -59,6 +61,7 @@ export function RunnerForest({ sim }) {
     for (const s of slots) {
       const { ahead, lap } = slotAhead(s.base, dist)
       if (lap !== s.lap) { s.lap = lap; s.tree = treeAt(s.i, lap) }
+      if (ahead < -BEHIND_CAMERA) continue // behind the camera
       const t = s.tree
       const l = ahead < LOD_NEAR ? 0 : ahead < LOD_MID ? 1 : 2
       const key = `${t.v}:${l}`
@@ -73,7 +76,6 @@ export function RunnerForest({ sim }) {
       meshes[k].count = counts[k]
       meshes[k].instanceMatrix.needsUpdate = true
     }
-    void mat
   })
 
   return <primitive object={forest.group} />

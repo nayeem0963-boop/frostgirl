@@ -16,7 +16,7 @@ function trailTexture() {
   const W = 256, H = 256
   const c = document.createElement('canvas'); c.width = W; c.height = H
   const g = c.getContext('2d')
-  g.fillStyle = '#e6eef7'; g.fillRect(0, 0, W, H)
+  g.fillStyle = '#d3e1f0'; g.fillRect(0, 0, W, H) // packed snow: a touch darker and bluer than the powder around it
   const r = rng(11)
   // packed ruts (darker) and sparkle
   for (let i = 0; i < 1400; i++) {
@@ -27,12 +27,16 @@ function trailTexture() {
     g.fillStyle = `rgba(255,255,255,${0.2 + r() * 0.4})`
     g.fillRect(r() * W, r() * H, 1, 1)
   }
+  // soft shoulder shading so the trail separates from the snow beside it
+  const sh = g.createLinearGradient(0, 0, W, 0)
+  sh.addColorStop(0, 'rgba(120,160,205,0.45)'); sh.addColorStop(0.09, 'rgba(120,160,205,0)'); sh.addColorStop(0.91, 'rgba(120,160,205,0)'); sh.addColorStop(1, 'rgba(120,160,205,0.45)')
+  g.fillStyle = sh; g.fillRect(0, 0, W, H)
   // lane dividers and glowing edge rails (u across the TRAIL width)
   const u = (x) => ((x + TRAIL_HALF_WIDTH) / (TRAIL_HALF_WIDTH * 2)) * W
-  g.fillStyle = 'rgba(120,170,225,0.55)'
+  g.fillStyle = 'rgba(70,130,205,0.6)'
   const half = LANE_WIDTH / 2
   for (const x of [-half, half]) for (let y = 0; y < H; y += 64) g.fillRect(u(x) - 1.5, y, 3, 36) // dashed
-  g.fillStyle = 'rgba(95,150,215,0.5)'
+  g.fillStyle = 'rgba(55,115,200,0.65)'
   for (const x of [-(LANES[2] + half), LANES[2] + half]) g.fillRect(u(x) - 2, 0, 4, H) // solid outer rails
   const t = new CanvasTexture(c)
   t.wrapS = t.wrapT = RepeatWrapping
