@@ -69,3 +69,16 @@ export function isUnlocked(progress, worldId, worldIds) {
 
 export const nextWorldId = (worldId, worldIds) => worldIds[worldIds.indexOf(worldId) + 1] ?? null
 export const totalStars = (progress) => Object.values(progress.worlds).reduce((n, w) => n + w.stars, 0)
+
+/** One card per world for the world-select screen: what to show, and whether it can be played. */
+export function describeWorlds(progress, worlds, unlockAll = false) {
+  const ids = worlds.map((w) => w.id)
+  return worlds.map((w, i) => {
+    const saved = progress.worlds[w.id] ?? { best: 0, bestOrbs: 0, stars: 0, completed: false }
+    const open = unlockAll || isUnlocked(progress, w.id, ids)
+    return {
+      id: w.id, name: w.name, finish: w.runner.finishDistance, stars: saved.stars, best: saved.best, completed: saved.completed,
+      locked: !open, unlockedBy: open || i === 0 ? null : worlds[i - 1].name, // "Finish <name> to unlock"
+    }
+  })
+}

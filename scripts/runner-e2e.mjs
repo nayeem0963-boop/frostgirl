@@ -387,6 +387,83 @@ if (want('level')) {
   await ctx.close()
 }
 
+// ------------------------------------------------------------------ world select (4.4)
+if (want('select')) {
+  const KEY = 'frost-runner-progress-v1'
+  const cardsState = (page) => S(page, () => [...document.querySelectorAll('.runner-card')].map((c) => ({ id: c.dataset.world, disabled: c.disabled, text: c.innerText.replace(/\s+/g, ' ') })))
+  const nearFinish = (page, metres, orbs, seen) => S(page, ([m, o, n]) => { const s = window.__frostRunner.sim; for (const q of s.obstacles) q.active = false; s.gen.lastPos = 1e9; s.dist = s.world.finishDistance - m; s.orbCount = o; s.orbsSeen = n }, [metres, orbs, seen])
+  const { ctx, page, errors } = await open({ width: 1000, height: 600 })
+  await page.getByRole('button', { name: 'Worlds' }).click(); await sleep(300)
+  let cards = await cardsState(page)
+  check('world select lists all seven worlds', cards.length === 7)
+  check('a fresh save opens only World 01', cards[0].disabled === false && cards.slice(1).every((c) => c.disabled), cards.map((c) => c.disabled ? 'L' : 'o').join(''))
+  check('locked worlds say what unlocks them', /Finish Frozen Kingdom/.test(cards[1].text), cards[1].text)
+  await page.locator('[data-world="03"]').click({ force: true }).catch(() => {})
+  check('a locked world cannot be selected', (await S(page, () => window.__frostRunner.sim.world.finishDistance)) === 1500 && (await page.locator('[data-screen="worlds"]').isVisible()))
+  await page.keyboard.press('Enter'); await sleep(300)
+  check('Enter in the world list does not start a run', (await sim(page)).phase === 'ready')
+  await page.keyboard.press('Escape'); await sleep(300)
+  check('Esc closes the world list', await page.locator('[data-screen="start"]').isVisible())
+  // finish World 01, then "Next world" switches in-page
+  const fog0 = await S(page, () => window.__frostRunner.debug.scene.fog.color.getHexString())
+  await page.keyboard.press('Enter'); await sleep(500)
+  await clear(page); await nearFinish(page, 60, 330, 380)
+  await page.waitForSelector('[data-screen="complete"]', { timeout: 90000 })
+  await page.getByRole('button', { name: 'Next world' }).click(); await sleep(1200)
+  const after = await S(page, () => ({ fog: window.__frostRunner.debug.scene.fog.color.getHexString(), phase: window.__frostRunner.sim.phase, finish: window.__frostRunner.sim.world.finishDistance, url: location.search, title: document.title }))
+  check('"Next world" switches worlds in-page (no reload), back on the start screen', after.phase === 'ready' && /world=02/.test(after.url) && /Whispering Ice Forest/.test(after.title) && after.fog !== fog0, `${after.title} ${after.url}`)
+  check('the new world shows on the start screen', /Whispering Ice Forest/.test(await page.getByTestId('level-info').innerText()))
+  await page.getByRole('button', { name: 'Worlds' }).click(); await sleep(300)
+  cards = await cardsState(page)
+  check('finishing World 01 opened World 02 (not 03) and shows its stars', cards[1].disabled === false && cards[2].disabled === true && /★/.test(cards[0].text), cards.map((c) => c.disabled ? 'L' : 'o').join(''))
+  await page.locator('[data-world="01"]').click(); await sleep(1000)
+  check('picking an open world from the list switches to it', /Frozen Kingdom/.test(await page.getByTestId('level-info').innerText()) && /world=01/.test(await S(page, () => location.search)))
+  const saved = await S(page, (k) => JSON.parse(localStorage.getItem(k)), KEY)
+  check('switching worlds keeps the saved progress', saved.worlds['01'].completed === true)
+  // deep links
+  await page.goto(`${base}/?game=frost&debug&world=03`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('?world=03 (locked) falls back to World 01', /Frozen Kingdom/.test(await page.getByTestId('level-info').innerText()))
+  await page.goto(`${base}/?game=frost&debug&world=03&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('?world=03&unlock=all opens World 03', /Crystal Mountains/.test(await page.getByTestId('level-info').innerText()))
+  await page.getByRole('button', { name: 'Worlds' }).click(); await sleep(300)
+  check('?unlock=all opens every world in the list', (await cardsState(page)).every((c) => !c.disabled))
+  check('no page errors (world select)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('select')) {
+  // the Auto play bot finishes every world in the real browser (the last 60 m of each level, with real rendering)
+  for (const id of ['01', '02', '03', '04', '05', '06', '07']) {
+    const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, `&world=${id}&unlock=all`)
+    await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+    await S(page, () => { const s = window.__frostRunner.sim; s.dist = s.world.finishDistance - 70 })
+    for (let i = 0; i < 6000 && (await sim(page)).phase === 'running'; i++) await realSleep(40)
+    const r = await S(page, () => { const s = window.__frostRunner.sim; return { phase: s.phase, dist: Math.round(s.dist), finish: s.world.finishDistance, stars: s.stars } })
+    check(`[world ${id}] Auto play finishes the level in the browser`, r.phase === 'complete' && r.dist >= r.finish, `${r.dist}/${r.finish} m, ${r.stars} star(s)${errors.length ? ', errors: ' + errors.slice(0, 2).join(' | ') : ''}`)
+    await ctx.close()
+  }
+}
+
+if (want('select')) {
+  // phones: the list fits and can be used by touch
+  for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
+    const { ctx, page } = await open(vp, true)
+    await S(page, () => localStorage.setItem('frost-runner-progress-v1', JSON.stringify({ version: 1, worlds: { '01': { best: 1500, bestOrbs: 300, stars: 2, completed: true } } })))
+    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+    await page.getByRole('button', { name: 'Worlds' }).tap(); await sleep(300)
+    await page.screenshot({ path: `${out}/phone-${tag}-worlds.png` })
+    const fit = await S(page, ([w]) => [...document.querySelectorAll('.runner-card')].every((c) => { const r = c.getBoundingClientRect(); return r.left >= 0 && r.right <= w }), [vp.width])
+    check(`[${tag}] world cards fit the screen width`, fit)
+    await page.locator('[data-world="02"]').tap(); await sleep(1000)
+    check(`[${tag}] tapping an open world switches to it`, /Whispering Ice Forest/.test(await page.getByTestId('level-info').innerText()))
+    await page.getByRole('button', { name: 'Worlds' }).tap(); await sleep(300)
+    await page.getByRole('button', { name: 'Back' }).scrollIntoViewIfNeeded()
+    const back = await page.getByRole('button', { name: 'Back' }).boundingBox()
+    check(`[${tag}] the Back button can be reached`, !!back && back.y + back.height <= vp.height + 1)
+    await ctx.close()
+  }
+}
+
 // ------------------------------------------------------------------ phone portrait: swipes
 async function phone(viewport, tag) {
   const { ctx, page, errors } = await open(viewport, true)

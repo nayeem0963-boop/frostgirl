@@ -58,6 +58,10 @@ async function measure(name, viewport, mobile) {
     out.push(await read('without snowfall', (o) => o.isPoints))
     out.push(await read('without Aisha', (o) => o.isSkinnedMesh))
     out.push(await read('only Aisha', (o) => (o.isMesh || o.isPoints || o.isInstancedMesh) && !o.isSkinnedMesh))
+    // the same frame with the finish gate in view (it is hidden for most of a level): must stay within the budget too
+    window.__frostRunner.sim.dist = window.__frostRunner.sim.world.finishDistance - 40
+    await frames(8)
+    out.push(await read('everything, finish gate in view'))
     d.gl.info.autoReset = true
     const i = d.gl.info
     return { out, geometries: i.memory.geometries, textures: i.memory.textures, simMs: d.simMs, heap: performance.memory?.usedJSHeapSize }
@@ -69,7 +73,8 @@ async function measure(name, viewport, mobile) {
   const frames = await page.evaluate(() => window.__frostRunner.debug.frames)
   console.log(`\n== ${name} ${viewport.width}x${viewport.height}`)
   for (const r of stats.out) console.log(`  ${r.label.padEnd(18)} draw calls ${String(r.calls).padStart(3)}   triangles ${String(r.triangles).padStart(7)}   points ${r.points}`)
-  const all = stats.out.find((r) => r.label === 'everything')
+  const worst = stats.out.filter((r) => r.label.startsWith('everything')).reduce((a, r) => ({ calls: Math.max(a.calls, r.calls), triangles: Math.max(a.triangles, r.triangles) }), { calls: 0, triangles: 0 })
+  const all = worst
   const ok = all.triangles <= BUDGET.triangles && all.calls <= BUDGET.calls
   console.log(`  budget (<= ${BUDGET.triangles / 1000}k triangles, <= ${BUDGET.calls} draw calls): ${ok ? 'OK' : 'OVER'}`)
   if (!ok) failures.push(`${name}: ${all.calls} draw calls, ${all.triangles} triangles`)
