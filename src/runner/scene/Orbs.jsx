@@ -87,7 +87,8 @@ export function Orbs({ sim }) {
     const t = clock.elapsedTime
     let n = 0
     for (const o of s.orbs) {
-      if (!o.active || o.dist - s.dist > ORBS.drawAhead) continue // beyond ~55 m an orb is a few pixels
+      const ahead = o.dist - s.dist
+      if (!o.active || ahead > ORBS.drawAhead || ahead < -1.2) continue // beyond ~55 m an orb is a few pixels; once past Aisha it would loom beside the camera (which sits 5.6 m behind her)
       const pop = o.taken ? o.takenT / ORBS.popTime : 0
       tmp.position.set(o.x, o.y + Math.sin(t * 2.4 + o.id) * 0.06 + pop * 0.9, -(o.dist - s.dist))
       tmp.rotation.set(0, t * 1.6 + o.id, 0)

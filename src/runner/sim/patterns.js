@@ -38,20 +38,21 @@ export const baseGap = (d) => 2.0 - 0.75 * d
 export const sig = (row) => `${row.kind}:${row.lanes.join('')}`
 
 // Patterns are sequences of rows; later rows of a pattern use `gapScale` of the base gap (never below minGap).
-function patterns(r, d, n, last) {
+function patterns(r, d, n, last, w = {}) {
   const lane = () => Math.floor(r() * 3)
   const pick = (arr) => arr[Math.floor(r() * arr.length)]
   const list = []
-  const add = (weight, make) => { if (weight > 0) list.push({ weight, make }) }
-  add(n < 3 ? 6 : 4 - 2 * d, () => [{ kind: 'wall', lanes: [lane()] }])
-  add(d > 0.12 && n > 3 ? 1.5 + 2.5 * d : 0, () => { const open = lane(); return [{ kind: 'wall', lanes: ALL.filter((l) => l !== open) }] })
-  add(n >= 2 ? 2 : 0, () => [{ kind: 'ridge', lanes: ALL }])
-  add(n >= 3 ? 2 : 0, () => [{ kind: 'arch', lanes: ALL }])
+  // `w` = a world's pattern-weight multipliers (default 1 each); a multiplier of 0 removes the pattern
+  const add = (id, weight, make) => { const m = w[id] ?? 1; if (weight > 0 && m > 0) list.push({ weight: weight * m, make }) }
+  add('wall1', n < 3 ? 6 : 4 - 2 * d, () => [{ kind: 'wall', lanes: [lane()] }])
+  add('wall2', d > 0.12 && n > 3 ? 1.5 + 2.5 * d : 0, () => { const open = lane(); return [{ kind: 'wall', lanes: ALL.filter((l) => l !== open) }] })
+  add('ridge', n >= 2 ? 2 : 0, () => [{ kind: 'ridge', lanes: ALL }])
+  add('arch', n >= 3 ? 2 : 0, () => [{ kind: 'arch', lanes: ALL }])
   // two single walls in different lanes, close enough to feel like a slalom
-  add(d > 0.2 ? 1.8 : 0, () => { const a = lane(); const b = pick(ALL.filter((l) => l !== a)); return [{ kind: 'wall', lanes: [a] }, { kind: 'wall', lanes: [b] }] })
-  add(d > 0.3 ? 1.5 : 0, () => [{ kind: 'wall', lanes: [lane()] }, { kind: 'ridge', lanes: ALL }])
-  add(d > 0.45 ? 1.5 : 0, () => [{ kind: 'arch', lanes: ALL }, { kind: 'wall', lanes: [lane()] }])
-  add(d > 0.6 ? 1.2 : 0, () => { const open = lane(); const open2 = pick(ALL.filter((l) => l !== open)); return [{ kind: 'wall', lanes: ALL.filter((l) => l !== open) }, { kind: 'wall', lanes: ALL.filter((l) => l !== open2) }] })
+  add('slalom', d > 0.2 ? 1.8 : 0, () => { const a = lane(); const b = pick(ALL.filter((l) => l !== a)); return [{ kind: 'wall', lanes: [a] }, { kind: 'wall', lanes: [b] }] })
+  add('wallRidge', d > 0.3 ? 1.5 : 0, () => [{ kind: 'wall', lanes: [lane()] }, { kind: 'ridge', lanes: ALL }])
+  add('archWall', d > 0.45 ? 1.5 : 0, () => [{ kind: 'arch', lanes: ALL }, { kind: 'wall', lanes: [lane()] }])
+  add('zigzag', d > 0.6 ? 1.2 : 0, () => { const open = lane(); const open2 = pick(ALL.filter((l) => l !== open)); return [{ kind: 'wall', lanes: ALL.filter((l) => l !== open) }, { kind: 'wall', lanes: ALL.filter((l) => l !== open2) }] })
   void last
   return list
 }
@@ -60,8 +61,8 @@ function patterns(r, d, n, last) {
  * Pick the next group of rows. `state` = {n, history: string[], lastRow}. Returns {rows: [{row, gap}], }
  * where `gap` is the seconds between the previous row and this one.
  */
-export function nextPattern(state, r, d) {
-  const list = patterns(r, d, state.n, state.lastRow)
+export function nextPattern(state, r, d, weights = {}) {
+  const list = patterns(r, d, state.n, state.lastRow, weights)
   for (let attempt = 0; attempt < 12; attempt++) {
     const total = list.reduce((s, p) => s + p.weight, 0)
     let x = r() * total

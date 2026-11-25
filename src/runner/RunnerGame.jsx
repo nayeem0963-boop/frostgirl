@@ -4,10 +4,12 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACESFilmicToneMapping, PointsMaterial, BufferAttribute, BufferGeometry, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
-import { Sky, FOG_COLOR } from '../expedition/scene/Sky.jsx'
+import { Sky } from '../expedition/scene/Sky.jsx'
 import { MountainMassif } from '../expedition/scene/Distant.jsx'
 import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
+import { Backdrop } from './scene/Backdrop.jsx'
+import { pickWorld } from './worlds.js'
 import { RunnerForest } from './scene/RunnerForest.jsx'
 import { Obstacles } from './scene/Obstacles.jsx'
 import { Orbs } from './scene/Orbs.jsx'
@@ -22,6 +24,7 @@ const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-
 const OVER_DELAY = 600 // ms between the impact and the game-over panel / restart being available
 const FLAT_WORLD = { height: () => 0 } // MountainMassif only needs a ground height
 const SUN = new Vector3(-0.42, 0.36, 0.83).normalize()
+const SUN_POSITION = SUN.clone().multiplyScalar(60).toArray()
 
 function detectQuality() {
   const coarse = matchMedia('(pointer: coarse)').matches
@@ -142,21 +145,22 @@ function HitBurst({ sim }) {
   return <points geometry={geo} material={mat} frustumCulled={false} />
 }
 
-function Scene({ sim, quality, onPhase, onScore, onOrbs, debug }) {
+function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
+  const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
-      <color attach="background" args={[FOG_COLOR]} />
-      <fog attach="fog" args={[FOG_COLOR, 70, 520]} />
-      <hemisphereLight args={['#c4d8f0', '#7d8796', 1.15]} />
-      <ambientLight intensity={0.15} color="#b8c8e0" />
-      <directionalLight position={SUN.clone().multiplyScalar(60).toArray()} color="#fff2de" intensity={2.5} />
+      <color attach="background" args={[t.fog.color]} />
+      <fog attach="fog" args={[t.fog.color, t.fog.near, t.fog.far]} />
+      <hemisphereLight args={[t.light.hemiSky, t.light.hemiGround, t.light.hemiIntensity]} />
+      <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
+      <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
       <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} debug={debug} />
-      <Sky />
-      <Ground sim={sim} />
+      <Sky colors={t.sky} />
+      <Ground sim={sim} theme={t} />
       <Obstacles sim={sim} />
       <Shadow sim={sim} />
       <HitBurst sim={sim} />
-      <Snowfall count={quality === 'low' ? 500 : 1100} paused={false} />
+      <Snowfall count={t.snow.count[quality] ?? t.snow.count.high} paused={false} color={t.snow.color} />
       <Suspense fallback={null}>
         <RunnerForest sim={sim} quality={quality} />
         <RunnerAisha sim={sim} debug={debug} />
@@ -164,7 +168,7 @@ function Scene({ sim, quality, onPhase, onScore, onOrbs, debug }) {
         <Ready />
       </Suspense>
       <Suspense fallback={null}>
-        <MountainMassif world={FLAT_WORLD} />
+        {t.backdrop ? <Backdrop url={world.background} crop={t.backdrop.crop} /> : <MountainMassif world={FLAT_WORLD} />}
       </Suspense>
     </>
   )
@@ -178,7 +182,8 @@ function Ready() {
 
 export default function RunnerGame() {
   const sim = useRef(null)
-  if (!sim.current) { sim.current = createSim(); sim.current.phase = 'ready'; sim.current.anim = 'idle' }
+  const [world] = useState(() => pickWorld())
+  if (!sim.current) { sim.current = createSim(1, world.runner); sim.current.phase = 'ready'; sim.current.anim = 'idle' }
   const [phase, setPhase] = useState('ready')
   const [paused, setPaused] = useState(false)
   const [score, setScore] = useState(0)
@@ -267,9 +272,9 @@ export default function RunnerGame() {
     document.addEventListener('visibilitychange', hide)
     const prevent = (e) => e.preventDefault()
     el.addEventListener('touchmove', prevent, { passive: false })
-    document.title = 'Frost — Run'
+    document.title = world.id === '01' ? 'Frost — Run' : `Frost — ${world.name}`
     return () => { detach(); document.removeEventListener('visibilitychange', hide); el.removeEventListener('touchmove', prevent) }
-  }, [start, togglePause, exitAuto])
+  }, [start, togglePause, exitAuto, world.id, world.name])
 
   useEffect(() => {
     if (debug) window.__frostRunner = { sim: sim.current, command: (c) => command(sim.current, c), start, startAuto, exitAuto, reset: () => resetToReady(sim.current), debug }
@@ -282,7 +287,7 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
       >
-        <Scene sim={sim} quality={quality} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} debug={debug} />
       </Canvas>
 
       <div className="runner-hud" aria-live="polite">
