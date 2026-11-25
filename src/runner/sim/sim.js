@@ -205,7 +205,7 @@ function placeOrbs(sim, prevRow, prevPos, row, pos) {
   const from = prevPos + 3.2
   const to = pos - 3.2
   if (to - from >= (3 - 1) * ORBS.spacing && r() < ORBS.chance) {
-    const both = prevRow ? openLanes(prevRow).filter((l) => openLanes(row).includes(l)) : [1]
+    const both = prevRow ? openLanes(prevRow).filter((l) => openLanes(row).includes(l)) : openLanes(row) // the first line also avoids the first wall's lane
     const lanes = both.length ? both : openLanes(row)
     const lane = lanes[Math.floor(r() * lanes.length)]
     const n = Math.min(5, Math.floor((to - from) / ORBS.spacing) + 1)

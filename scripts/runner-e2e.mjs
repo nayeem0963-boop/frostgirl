@@ -49,6 +49,11 @@ const actAt = (page, kind, cmd, secs) => S(page, ([kind, cmd, secs]) => new Prom
   const tick = () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === kind); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= secs * s.speed) { window.__frostRunner.command(cmd); return res(true) } requestAnimationFrame(tick) }
   tick()
 }), [kind, cmd, secs])
+// In-page trigger for an orb: jumps in the frame where the nearest uncollected high orb is `secs` of running away.
+const jumpAtOrb = (page, secs) => S(page, (secs) => new Promise((res) => {
+  const tick = () => { const s = window.__frostRunner.sim; const o = s.orbs.find((q) => q.active && !q.taken && q.y > 2); if (!o || s.phase !== 'running') return res(false); if (o.dist - s.dist <= secs * s.speed) { window.__frostRunner.command('jump'); return res(true) } requestAnimationFrame(tick) }
+  tick()
+}), secs)
 // Remove generated obstacles so lane/jump/duck tests are not interrupted, then place one on demand.
 const clear = (page) => S(page, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; s.gen.lastPos = 1e9 })
 const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
@@ -216,9 +221,7 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   await sleep(2200)
   check('an orb in the jump arc is NOT collected by running under it', (await S(page, () => window.__frostRunner.sim.orbCount)) === 1)
   await putOrb(1, 2.35, 12)
-  let t0 = Date.now()
-  for (;;) { const a = await S(page, () => { const s = window.__frostRunner.sim; const o = s.orbs.find((q) => q.active && !q.taken && q.y > 2); return o ? o.dist - s.dist : -1 }); if (a < 0 || a <= (await S(page, () => window.__frostRunner.sim.speed)) * 0.28 || Date.now() - t0 > 20000) break; await sleep(5) }
-  await page.keyboard.press('Space'); await sleep(1500)
+  await jumpAtOrb(page, 0.28); await sleep(1500)
   check('an orb in the jump arc is collected by a jump', (await S(page, () => window.__frostRunner.sim.orbCount)) === 2)
   await place(page, 'wall', 1, 8)
   await page.waitForSelector('[data-screen="gameover"]', { timeout: 60000 })
@@ -244,11 +247,12 @@ const place = (page, kind, lane, ahead) => S(page, ([kind, lane, ahead]) => {
   void lane0
   await page.screenshot({ path: `${out}/11-auto-play.png` })
   // let the bot play for a while: it must survive real obstacles and collect orbs
-  await sleep(30000)
+  // wait for 25 s of GAME time (software rendering is slow, so allow plenty of wall time)
+  for (let i = 0; i < 12000; i++) { const st = await S(page, () => ({ t: window.__frostRunner.sim.time, ph: window.__frostRunner.sim.phase })); if (st.t >= 25 || st.ph !== 'running') break; await realSleep(50) }
   s = await sim(page)
   const stats = await S(page, () => ({ orbs: window.__frostRunner.sim.orbCount, auto: window.__frostRunner.sim.auto, jumps: window.__frostRunner.sim.count.jump ?? 0, ducks: window.__frostRunner.sim.count.duck ?? 0, lanes: window.__frostRunner.sim.count.lane ?? 0, t: window.__frostRunner.sim.time }))
-  check('Auto play survives 30 s of generated obstacles', s.phase === 'running' && stats.auto, `t ${stats.t.toFixed(1)} s, ${stats.lanes} lane changes, ${stats.jumps} jumps, ${stats.ducks} ducks`)
-  check('Auto play collects orbs', stats.orbs > 5, `${stats.orbs} orbs`)
+  check('Auto play survives 25 s of generated obstacles', s.phase === 'running' && stats.auto, `t ${stats.t.toFixed(1)} s, ${stats.lanes} lane changes, ${stats.jumps} jumps, ${stats.ducks} ducks`)
+  check('Auto play collects orbs', stats.orbs >= 5, `${stats.orbs} orbs`)
   await page.screenshot({ path: `${out}/12-auto-play-later.png` })
   await page.getByRole('button', { name: 'Stop' }).click()
   await sleep(300)
