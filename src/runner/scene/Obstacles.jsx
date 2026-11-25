@@ -8,7 +8,7 @@ import {
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { LANES, OBSTACLES, SHARD } from '../config.js'
-import { POOL, shardFall } from '../sim/sim.js'
+import { POOL, shardFall, holeOpen } from '../sim/sim.js'
 
 const _o = new Object3D()
 function part(geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
@@ -80,6 +80,55 @@ function crystalSpire() {
   ])
 }
 
+// World 04's cracking ice: the footprint of a hole is 2.0 m x 1.8 m (collider 1.8 x 1.6). First the lane shows cracks, then it breaks
+// open into dark water with an icy rim.
+function jagged(g, cx, cy, rx, ry, seed) {
+  let a = seed
+  const rnd = () => ((a = (a * 16807) % 2147483647) / 2147483647)
+  g.beginPath()
+  const n = 22
+  for (let i = 0; i <= n; i++) {
+    const t = (i / n) * Math.PI * 2
+    const k = 0.82 + rnd() * 0.22
+    const x = cx + Math.cos(t) * rx * k, y = cy + Math.sin(t) * ry * k
+    if (i === 0) g.moveTo(x, y); else g.lineTo(x, y)
+  }
+  g.closePath()
+}
+function crackTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256
+  const g = c.getContext('2d')
+  const halo = g.createRadialGradient(128, 128, 20, 128, 128, 120)
+  halo.addColorStop(0, 'rgba(30,100,200,0.62)'); halo.addColorStop(0.6, 'rgba(30,100,200,0.3)'); halo.addColorStop(1, 'rgba(30,100,200,0)')
+  g.fillStyle = halo; g.fillRect(0, 0, 256, 256)
+  let a = 7
+  const rnd = () => ((a = (a * 16807) % 2147483647) / 2147483647)
+  g.lineCap = 'round'; g.lineJoin = 'round'
+  for (let i = 0; i < 9; i++) { // jagged cracks radiating from the middle
+    const ang = (i / 9) * Math.PI * 2 + rnd() * 0.5
+    let x = 128, y = 128
+    g.beginPath(); g.moveTo(x, y)
+    for (let k = 0; k < 6; k++) { const len = 14 + rnd() * 16; const aa = ang + (rnd() - 0.5) * 0.9; x += Math.cos(aa) * len; y += Math.sin(aa) * len; g.lineTo(x, y) }
+    g.strokeStyle = 'rgba(20,70,150,0.95)'; g.lineWidth = 5; g.stroke()
+    g.strokeStyle = 'rgba(235,248,255,0.95)'; g.lineWidth = 1.8; g.stroke()
+  }
+  const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace
+  return t
+}
+function waterTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256
+  const g = c.getContext('2d')
+  jagged(g, 128, 128, 120, 110, 11); g.fillStyle = '#eaf6ff'; g.fill() // icy rim
+  jagged(g, 128, 128, 102, 92, 5)
+  const w = g.createRadialGradient(110, 100, 10, 128, 128, 110)
+  w.addColorStop(0, '#1f6fb8'); w.addColorStop(1, '#082a55')
+  g.fillStyle = w; g.fill()
+  g.strokeStyle = 'rgba(160,215,255,0.5)'; g.lineWidth = 2 // ripples
+  for (const r of [26, 46, 66]) { g.beginPath(); g.ellipse(120, 118, r, r * 0.8, 0, 0.2, 2.4); g.stroke() }
+  const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace
+  return t
+}
+
 // The warning ring where a shard will land: shown from far away, pulsing, until it has landed.
 function ringTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128
@@ -119,7 +168,7 @@ function softTexture() {
   return t
 }
 
-const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9], wolf: [1.9, 2.0], shard: [2.1, 1.8] } // footprint under each obstacle
+const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9], wolf: [1.9, 2.0], shard: [2.1, 1.8], hole: null } // (a hole has no footprint: it is one) // footprint under each obstacle
 const MARK_AHEAD = 8
 
 export function Obstacles({ sim }) {
@@ -143,6 +192,9 @@ export function Obstacles({ sim }) {
     const marks = {
       ridge: new InstancedMesh(flat, markMat(chevronTexture(true, '#ff9d1c')), POOL),
       arch: new InstancedMesh(flat, markMat(chevronTexture(false, '#1f78d1')), POOL),
+      crack: new InstancedMesh(flat, markMat(crackTexture()), POOL),
+      iceBeam: new InstancedMesh(new BoxGeometry(0.4, 9, 0.4).translate(0, 4.5, 0), new MeshBasicMaterial({ color: '#5cd6ff', transparent: true, opacity: 0.3, blending: AdditiveBlending, depthWrite: false }), POOL),
+      water: new InstancedMesh(flat, markMat(waterTexture()), POOL),
       beam: new InstancedMesh(new BoxGeometry(0.5, 16, 0.5).translate(0, 8, 0), new MeshBasicMaterial({ color: '#9a86ff', transparent: true, opacity: 0.3, blending: AdditiveBlending, depthWrite: false }), POOL),
       shard: new InstancedMesh(flat, new MeshBasicMaterial({ map: ringTexture(), transparent: true, depthWrite: false, blending: AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -3, side: DoubleSide }), POOL),
     }
@@ -174,6 +226,7 @@ export function Obstacles({ sim }) {
       if (meshes[o.kind]) meshes[o.kind].setMatrixAt(n[o.kind]++, tmp.matrix) // (a wolf has no instanced mesh: scene/Wolves.jsx draws it)
       if (!landed) continue // no footprint under a falling shard
       tmp.rotation.set(0, 0, 0)
+      if (!SHADOW[o.kind]) continue
       const [w, d] = SHADOW[o.kind]
       tmp.position.set(o.x, 0.03, z)
       tmp.scale.set(w, 1, d)
@@ -182,10 +235,22 @@ export function Obstacles({ sim }) {
     }
     for (const k in meshes) { meshes[k].count = n[k]; meshes[k].instanceMatrix.needsUpdate = true }
     shadow.count = sh; shadow.instanceMatrix.needsUpdate = true
-    let mr = 0, ma = 0, ms = 0, mb = 0
+    let mr = 0, ma = 0, ms = 0, mb = 0, mc = 0, mw = 0, mi = 0
     for (const o of s.obstacles) {
       if (!o.active || o.kind === 'wall' || o.kind === 'wolf') continue
       const ahead = o.dist - s.dist
+      if (o.kind === 'hole') { // cracks first, then dark water with an icy rim breaks open (decals on the trail)
+        const open = holeOpen(ahead)
+        tmp.rotation.set(0, 0, 0)
+        tmp.position.set(o.x, 0.05, -ahead)
+        if (open < 0.7) { // the cracking patch is drawn bigger than the hole and gets a faint cyan column of light, so it reads from far away
+          const pulse = 3.2 * (0.95 + 0.07 * Math.sin(clock.elapsedTime * 6 + o.id))
+          tmp.scale.set(pulse, 1, pulse * 0.95); tmp.updateMatrix(); marks.crack.setMatrixAt(mc++, tmp.matrix)
+          tmp.position.y = 0; tmp.scale.set(1, 1, 1); tmp.updateMatrix(); marks.iceBeam.setMatrixAt(mi++, tmp.matrix); tmp.position.y = 0.05
+        }
+        if (open > 0) { const k = 0.55 + 0.45 * open; tmp.position.y = 0.06; tmp.scale.set(2.05 * k, 1, 1.85 * k); tmp.updateMatrix(); marks.water.setMatrixAt(mw++, tmp.matrix) }
+        continue
+      }
       if (o.kind === 'shard') { // pulsing ring on the lane, until the spire has landed
         if (shardFall(ahead) >= 1) continue
         const pulse = 3.6 * (0.92 + 0.12 * Math.sin(clock.elapsedTime * 7 + o.id))
@@ -211,6 +276,9 @@ export function Obstacles({ sim }) {
     marks.arch.count = ma; marks.arch.instanceMatrix.needsUpdate = true
     marks.shard.count = ms; marks.shard.instanceMatrix.needsUpdate = true
     marks.beam.count = mb; marks.beam.instanceMatrix.needsUpdate = true
+    marks.crack.count = mc; marks.crack.instanceMatrix.needsUpdate = true
+    marks.iceBeam.count = mi; marks.iceBeam.instanceMatrix.needsUpdate = true
+    marks.water.count = mw; marks.water.instanceMatrix.needsUpdate = true
   })
   return <primitive object={group} />
 }

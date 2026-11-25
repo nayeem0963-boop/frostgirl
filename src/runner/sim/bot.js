@@ -3,9 +3,12 @@
 import { command, aheadOf } from './sim.js'
 import { LANES } from '../config.js'
 
-// walls, wolves and crystal shards block one lane; a wolf's x is still moving while it lunges, so its lane is stored on it
+// walls, wolves, crystal shards and holes in the ice block one lane (the bot always dodges; a hole could be jumped too); a wolf's x is still moving while it lunges, so its lane is stored on it
 const laneOf = (o) => o.lane ?? LANES.indexOf(o.x)
-const blocksLane = (o) => o.kind === 'wall' || o.kind === 'wolf' || o.kind === 'shard'
+const blocksLane = (o) => o.kind === 'wall' || o.kind === 'wolf' || o.kind === 'shard' || o.kind === 'hole'
+
+// A hole's danger zone reaches 1.08 m behind its centre (half length 0.8 + Aisha's half depth 0.28); walls 0.73 m.
+const BEHIND = -1.3
 
 export function createBot() {
   return { done: new Set() } // rows already acted on
@@ -15,7 +18,7 @@ export function createBot() {
 export function botStep(sim, bot) {
   if (sim.phase !== 'running' || sim.paused) return
   const v = sim.speed
-  const near = sim.obstacles.filter((o) => o.active && aheadOf(sim, o) > -0.9)
+  const near = sim.obstacles.filter((o) => o.active && aheadOf(sim, o) > BEHIND) // an obstacle still counts until its danger zone is clear behind her
   if (near.length) {
     const first = Math.min(...near.map((o) => aheadOf(sim, o)))
     const row = near.filter((o) => Math.abs(aheadOf(sim, o) - first) < 0.01)
@@ -53,7 +56,7 @@ function steerToOrbs(sim) {
   for (const o of sim.obstacles) {
     if (!o.active || !blocksLane(o) || (laneOf(o) !== best.lane && laneOf(o) !== next)) continue
     const a = aheadOf(sim, o)
-    if (a > -0.9 && (a < best.a + 4 || a < sim.speed * 2.2)) return
+    if (a > BEHIND && (a < best.a + 4 || a < sim.speed * 2.2)) return
   }
   // and the lane we leave must not be needed right now: a wall row very close in our current lane is handled above
   command(sim, best.lane < sim.lane ? 'left' : 'right', true)

@@ -1,6 +1,6 @@
 // Pure runner simulation (no React / three): state machine, player physics,
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
-import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD } from '../config.js'
+import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD, HOLE } from '../config.js'
 import { starsFor } from '../progress.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
@@ -180,6 +180,12 @@ function standBlocked(sim) {
 const difficulty = (sim) => Math.min(1, sim.time / (sim.world.difficultySeconds ?? DIFFICULTY_SECONDS))
 const speedAt = (sim, pos) => Math.min(RUN.maxSpeed, sim.speed + (RUN.accel * Math.max(0, pos - sim.dist)) / Math.max(sim.speed, 1))
 
+/** How far a cracking ice patch has broken open: 0 = cracked but solid, 1 = open water (breakFrom -> breakTo metres ahead). */
+export function holeOpen(ahead) {
+  const t = Math.min(1, Math.max(0, (HOLE.breakFrom - ahead) / (HOLE.breakFrom - HOLE.breakTo)))
+  return t * t * (3 - 2 * t)
+}
+
 /** Fall progress of a crystal shard: 0 until it is dropFrom metres ahead, 1 once it has landed (landAt metres ahead). */
 export function shardFall(ahead) {
   return Math.min(1, Math.max(0, (SHARD.dropFrom - ahead) / (SHARD.dropFrom - SHARD.landAt)))
@@ -193,13 +199,13 @@ export function wolfProgress(ahead) {
 export const wolfX = (o, ahead) => { const a = o.side * WOLF.sideX; return a + (LANES[o.lane] - a) * wolfProgress(ahead) }
 
 function place(sim, row, at) {
-  const slots = row.kind === 'wall' || row.kind === 'wolf' || row.kind === 'shard' ? row.lanes : [1]
+  const slots = row.kind === 'wall' || row.kind === 'wolf' || row.kind === 'shard' || row.kind === 'hole' ? row.lanes : [1]
   for (const lane of slots) {
     const o = sim.obstacles.find((q) => !q.active)
     if (!o) return
     o.active = true; o.kind = row.kind; o.id = sim.nextId++
     o.lane = lane; o.side = lane === 0 ? -1 : lane === 2 ? 1 : (row.side ?? 1) // each wolf comes from its nearer edge
-    o.x = row.kind === 'wall' || row.kind === 'shard' ? LANES[lane] : row.kind === 'wolf' ? o.side * WOLF.sideX : 0
+    o.x = row.kind === 'wall' || row.kind === 'shard' || row.kind === 'hole' ? LANES[lane] : row.kind === 'wolf' ? o.side * WOLF.sideX : 0
     o.dist = at
     o.row = sim.gen.n
   }
@@ -231,6 +237,7 @@ function placeOrbs(sim, prevRow, prevPos, row, pos) {
     for (let i = 0; i < n; i++) putOrb(sim, LANES[lane], ORBS.groundY, start + i * ORBS.spacing)
   }
   if (row.kind === 'ridge') for (const d of [-1.6, 0, 1.6]) putOrb(sim, LANES[1], ORBS.arcY, pos + d)
+  if (row.kind === 'hole') for (const lane of row.lanes) for (const d of [-1.2, 0, 1.2]) putOrb(sim, LANES[lane], ORBS.arcY, pos + d) // a jump over the hole collects them
 }
 
 function fillObstacles(sim) {
