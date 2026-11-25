@@ -8,7 +8,7 @@
 //   patternWeights      multipliers (default 1) per obstacle pattern, see PATTERNS in src/runner/sim/patterns.js
 //   finishDistance      metres to finish the level; difficultySeconds: run time until the generator is at full difficulty
 
-export const PATTERN_IDS = ['wall1', 'wall2', 'ridge', 'arch', 'slalom', 'wallRidge', 'archWall', 'zigzag', 'wolf', 'wolfWall', 'wolfPair', 'shard', 'shardWall', 'shardPair']
+export const PATTERN_IDS = ['wall1', 'wall2', 'ridge', 'arch', 'slalom', 'wallRidge', 'archWall', 'zigzag', 'wolf', 'wolfWall', 'wolfPair', 'shard', 'shardWall', 'shardPair', 'hole', 'holeWall', 'holePair']
 // `hazards`: signature hazards a world turns on (each needs its pattern weights too, see sim/patterns.js `opt`)
 
 const WORLD_1 = {
@@ -73,7 +73,8 @@ export const runnerThemes = {
     ground: { base: '#e7f6fb', speck: [150, 200, 220] },
     trail: { base: '#c4e3ee', speck: [130, 180, 200], shade: [90, 160, 190], divider: [40, 140, 190], rail: [20, 125, 185] },
     backdrop: { crop: 0.42 },
-    patternWeights: { arch: 1.4, wallRidge: 1.3 },
+    hazards: { hole: true }, // the ice cracks and breaks open into water: dodge it or jump it
+    patternWeights: { arch: 1.4, wallRidge: 1.3, hole: 1.8, holeWall: 1.0, holePair: 0.7 },
     finishDistance: 1700,
   }),
   // Frosted Dream Desert: rose and peach drifts -> long gaps, ridges
