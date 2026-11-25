@@ -381,7 +381,9 @@ if (want('level')) {
   }
   const { ctx, page } = await open({ width: 800, height: 450 })
   await page.goto(`${base}/?game=frost&debug&world=02`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
-  check('World 02 start screen shows its name and 1600 m', /Whispering Ice Forest\s*·\s*1600 m/.test(await page.getByTestId('level-info').innerText()))
+  check('World 02 start screen shows its name and 1500 m', /Whispering Ice Forest\s*·\s*1500 m/.test(await page.getByTestId('level-info').innerText()))
+  await page.goto(`${base}/?game=frost&debug&world=03`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  check('World 03 start screen shows its name and 1600 m', /Crystal Mountains\s*·\s*1600 m/.test(await page.getByTestId('level-info').innerText()))
   await ctx.close()
 }
 
