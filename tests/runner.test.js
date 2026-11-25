@@ -4,7 +4,8 @@ import { createSim, startRun, update, command, STEP, aheadOf, resetToReady, runR
 import { classifySwipe, KEYMAP } from '../src/runner/sim/input.js'
 import { cameraFor, cameraTarget } from '../src/runner/sim/camera.js'
 import { minGap, openLanes, worstShift, baseGap } from '../src/runner/sim/patterns.js'
-import { LANES, PLAYER, OBSTACLES, RUN, ANIM } from '../src/runner/config.js'
+import { LANES, PLAYER, OBSTACLES, RUN, ANIM, ORBS } from '../src/runner/config.js'
+import { createBot, botStep } from '../src/runner/sim/bot.js'
 import { scatterTrees, TREE_MIN_X } from '../src/runner/scene/scenery.js'
 
 const run = (sim, seconds) => { for (let t = 0; t < seconds; t += 1 / 60) update(sim, 1 / 60) }
@@ -14,31 +15,17 @@ function put(sim, kind, lane, ahead) {
   Object.assign(o, { active: true, kind, x: kind === 'wall' ? LANES[lane] : 0, dist: sim.dist + ahead, id: 999 })
   return o
 }
-const clearObstacles = (s) => { for (const o of s.obstacles) o.active = false; s.gen.lastPos = 1e9 }
+const clearObstacles = (s) => { for (const o of s.obstacles) o.active = false; for (const o of s.orbs) o.active = false; s.gen.lastPos = 1e9 }
+const putOrbAt = (sim, lane, y, ahead) => { const o = sim.orbs.find((q) => !q.active); Object.assign(o, { active: true, taken: false, takenT: 0, x: LANES[lane], y, dist: sim.dist + ahead, id: 777 }); return o }
 const laneOf = (o) => LANES.indexOf(o.x)
 
-// A bot that reads the obstacle rows ahead and acts only through command(): proves the generated patterns are survivable.
-function botFrame(sim, st) {
-  const near = sim.obstacles.filter((o) => o.active && aheadOf(sim, o) > -0.9)
-  if (!near.length) return
-  const first = Math.min(...near.map((o) => aheadOf(sim, o)))
-  const row = near.filter((o) => Math.abs(aheadOf(sim, o) - first) < 0.01)
-  const v = sim.speed
-  const id = row[0].id
-  if (row[0].kind === 'ridge') { if (first <= v * 0.28 && !st.done.has(id)) { st.done.add(id); command(sim, 'jump') } }
-  else if (row[0].kind === 'arch') { if (first <= v * 0.3 && !st.done.has(id)) { st.done.add(id); command(sim, 'duck') } }
-  else if (first <= v * 1.0) {
-    const blocked = new Set(row.map(laneOf))
-    if (blocked.has(sim.lane)) {
-      const open = [0, 1, 2].filter((l) => !blocked.has(l)).sort((a, b) => Math.abs(a - sim.lane) - Math.abs(b - sim.lane))
-      command(sim, open[0] < sim.lane ? 'left' : 'right')
-    }
-  }
-}
+// The real Auto play bot (sim/bot.js): it acts only through command(), so surviving proves the generated patterns are playable.
 function botRun(seed, seconds) {
-  const s = started(seed)
-  const st = { done: new Set() }
-  for (let t = 0; t < seconds && s.phase === 'running'; t += 1 / 60) { botFrame(s, st); update(s, 1 / 60) }
+  const s = createSim(seed)
+  startRun(s, seed, { auto: true })
+  const bot = createBot()
+  s.driver = (q) => botStep(q, bot)
+  for (let t = 0; t < seconds && s.phase === 'running'; t += 1 / 60) update(s, 1 / 60)
   return s
 }
 
@@ -378,7 +365,7 @@ test('generator: patterns vary, no signature three times in a row, difficulty ri
   assert.ok(mean(late) / RUN.maxSpeed < mean(early) / RUN.startSpeed, 'late rows are closer in time than early rows')
 })
 
-test('generator: patterns are survivable by a bot, from 1 to 150 s, for many seeds', () => {
+test('generator: patterns are survivable by the Auto play bot, from 1 to 180 s, for many seeds', () => {
   for (let seed = 1; seed <= 12; seed++) {
     const s = botRun(seed, DIFFICULTY_SECONDS + 30)
     assert.equal(s.phase, 'running', `seed ${seed}: bot died at ${s.time.toFixed(1)}s hitting ${s.hit?.kind} lane ${s.hit && LANES.indexOf(s.hit.x)} (lane ${s.lane})`)
@@ -456,4 +443,94 @@ test('decorative pines never sit on the lanes or the camera path', () => {
 test('ready state resets', () => {
   const s = started(); run(s, 1); resetToReady(s)
   assert.equal(s.phase, 'ready'); assert.equal(s.dist, 0)
+})
+
+// ---- Orbs of Chi ---------------------------------------------------------------------
+test('orbs: running through an orb collects it once; other lanes are untouched', () => {
+  const s = started(); clearObstacles(s)
+  const mine = putOrbAt(s, 1, ORBS.groundY, 12)
+  const other = putOrbAt(s, 0, ORBS.groundY, 12)
+  run(s, 3)
+  assert.equal(s.orbCount, 1)
+  assert.equal(mine.taken, true)
+  assert.equal(other.taken, false)
+  assert.equal(s.count.orb, 1)
+  run(s, 1)
+  assert.equal(s.orbCount, 1, 'never counted twice')
+  assert.equal(mine.active, false, 'collected orbs are removed after the pop animation')
+})
+
+test('orbs: a fast long frame cannot skip an orb', () => {
+  const s = started(); clearObstacles(s)
+  s.speed = RUN.maxSpeed
+  putOrbAt(s, 1, ORBS.groundY, 1.0)
+  update(s, 0.05); update(s, 0.05)
+  assert.equal(s.orbCount, 1)
+})
+
+test('orbs: jump arcs over a ridge need a jump; standing and ducking do not reach them', () => {
+  assert.ok(ORBS.arcY - ORBS.radius > PLAYER.standHeight, 'an orb in the arc is above a standing Aisha')
+  const a = started(); clearObstacles(a); putOrbAt(a, 1, ORBS.arcY, 10)
+  run(a, 3); assert.equal(a.orbCount, 0, 'running under it collects nothing')
+  const b = started(); clearObstacles(b); const o = putOrbAt(b, 1, ORBS.arcY, 12)
+  while (aheadOf(b, o) > b.speed * 0.28) update(b, STEP)
+  command(b, 'jump'); run(b, 2)
+  assert.equal(b.orbCount, 1, 'a jump at the usual moment collects it')
+})
+
+test('orbs: a collected-orb count and pool reset on restart', () => {
+  const s = started(); clearObstacles(s); putOrbAt(s, 1, ORBS.groundY, 8); run(s, 2)
+  assert.equal(s.orbCount, 1)
+  startRun(s)
+  assert.equal(s.orbCount, 0); assert.equal(s.orbsSeen > 0, true)
+  assert.ok(s.orbs.every((q) => !q.taken))
+})
+
+test('orbs: spawned in gaps only, clear of every obstacle, deterministic, within the pool', () => {
+  for (const seed of [1, 2, 3, 4]) {
+    const s = started(seed)
+    const rows = new Map(), orbs = new Map()
+    for (let i = 0; i < 60 * 120; i++) {
+      s.phase = 'running'; update(s, 1 / 60)
+      for (const o of s.obstacles) if (o.active) rows.set(o.id, { dist: o.dist, kind: o.kind, x: o.x })
+      for (const q of s.orbs) if (q.active) orbs.set(q.id, { dist: q.dist, x: q.x, y: q.y })
+    }
+    assert.ok(orbs.size > 40, `seed ${seed}: ${orbs.size} orbs`)
+    for (const q of orbs.values()) {
+      for (const r of rows.values()) {
+        const d = Math.abs(q.dist - r.dist)
+        if (q.y === ORBS.arcY) { assert.ok(d >= 1.5 - 1e-9 || r.kind === 'ridge', 'arc orbs sit over a ridge only'); continue }
+        assert.ok(d >= 3 - 1e-6, `seed ${seed}: ground orb ${d.toFixed(2)} m from a ${r.kind}`)
+      }
+    }
+  }
+  const a = started(5), b = started(5)
+  run(a, 20); run(b, 20)
+  const snap = (s) => s.orbs.filter((o) => o.active).map((o) => `${o.x}@${o.dist.toFixed(2)}:${o.y}`).join()
+  assert.equal(snap(a), snap(b))
+})
+
+// ---- Auto play -----------------------------------------------------------------------
+test('auto play: watch-only (player commands ignored), survives, and collects orbs', () => {
+  for (const seed of [21, 22, 23]) {
+    const s = botRun(seed, 120)
+    assert.equal(s.phase, 'running', `seed ${seed}: bot died at ${s.time.toFixed(1)} s`)
+    assert.equal(s.auto, true)
+    assert.ok(s.orbCount >= s.orbsSeen * 0.4, `seed ${seed}: collected ${s.orbCount} of ${s.orbsSeen}`)
+  }
+  const s = botRun(24, 5)
+  const lane = s.lane
+  assert.equal(command(s, 'left'), false, 'manual left ignored')
+  assert.equal(command(s, 'right'), false)
+  assert.equal(command(s, 'jump'), false)
+  assert.equal(command(s, 'duck'), false)
+  assert.equal(s.lane, lane)
+})
+
+test('auto play: a manual run is not affected and clears the driver', () => {
+  const s = createSim(); startRun(s, 3, { auto: true }); s.driver = () => {}
+  assert.equal(s.auto, true)
+  startRun(s, 4)
+  assert.equal(s.auto, false); assert.equal(s.driver, null)
+  assert.equal(command(s, 'left'), true)
 })

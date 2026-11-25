@@ -1,3 +1,35 @@
+# Frost — Phase 3: Orbs of Chi and Auto play (runner)
+
+**Orbs of Chi.** Collectibles built from the repo's `public/assets/collectibles/orb_of_chi.glb` (2,440 triangles, three
+translucent shells, a core and crystals, no textures). The GLB's materials are only 11-29% opaque (made for a dark
+background) and vanished against snow, so `scene/Orbs.jsx` merges the meshes per material and restyles them (saturated
+shell, bright core, opaque ice-white crystals); they are instanced, one draw call per material. Collection is decided by the
+sim only (`collectOrbs` in `sim/sim.js`): the body box (standing, ducked or airborne) is swept against the orb in z like
+obstacles are, so a long frame cannot skip one.
+
+- Ground lines (3-5 orbs, 2.2 m apart, chest height) are placed in the gap between two obstacle rows, in a lane that is open in
+  both rows, so collecting never asks for more than the rows already ask. Orbs stay 3.2 m away from every row.
+- Every fallen pine gets a 3-orb arc at 2.35 m: a standing Aisha (1.7 m) cannot touch it, a jump at the usual moment does.
+- HUD counter, orb count on the game-over panel, best orbs saved locally (`frost-runner-best-orbs`).
+
+**Auto play** (start-screen button). A watch-only mode: `sim/bot.js` drives the real game through `command(sim, cmd, true)`,
+exactly the path the keyboard uses, so it exercises the real generator, collisions and orbs. It dodges walls (nearest open
+lane), jumps ridges, ducks arches, and steers one lane at a time toward the nearest orb line only when every wall row ahead
+keeps that lane open. Player input is ignored while it runs (`command()` rejects non-bot commands when `sim.auto`); **Stop**
+or **Esc** returns to the start screen; Auto play runs do not touch best scores. If the bot ever died it would start a new
+demonstration run. **Auto play is meant to stay in the game** and doubles as a test harness (a bot-survival unit test over
+12 seeds for 180 s, and a browser test).
+
+**Tests.** `npm test` (116 tests; new: orb sweep/collection/jump arcs/spawn clearance/determinism/reset, Auto play is
+watch-only and survives and collects at least 40% of orbs). Browser (`npm run test:e2e`, `ONLY=orbs,auto,desktop,phone` reruns
+a subset): orb collection and HUD, jump arcs, orb count on game over, Auto play start/watch-only/25 s survival with orbs/Stop/Esc,
+and tapping Auto play on phones.
+
+**Known issues.** Orb count on the first line of a run depends on the seed; orbs are not magnetised; the Auto play bot is a
+perfect player (it never misses a jump) and does not yet showcase near-misses; no sound on pickup yet.
+
+---
+
 # Frost — Phase 2: gameplay feel (runner)
 
 Targeted refinements of the Phase 1 runner; same architecture, assets and controls.

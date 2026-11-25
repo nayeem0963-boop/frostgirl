@@ -1,7 +1,7 @@
 // Pure runner simulation (no React / three): state machine, player physics,
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
-import { LANES, PLAYER, RUN, OBSTACLES, ANIM } from '../config.js'
-import { nextPattern, sig } from './patterns.js'
+import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS } from '../config.js'
+import { nextPattern, sig, openLanes } from './patterns.js'
 
 export const STEP = 1 / 120
 export const POOL = 24
@@ -53,12 +53,19 @@ export function createSim(seed = 1) {
     count: {}, // lifetime event counters: jump, duck, lane, land, hit, start
     events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start'
     obstacles: Array.from({ length: POOL }, () => ({ active: false, kind: 'wall', x: 0, dist: 0, id: 0 })),
+    orbs: Array.from({ length: ORBS.pool }, () => ({ active: false, taken: false, takenT: 0, x: 0, y: 0, dist: 0, id: 0 })),
+    orbCount: 0, // orbs collected this run
+    orbsSeen: 0, // orbs spawned this run
+    auto: false, // Auto play: watch-only, the bot drives (see sim/bot.js)
+    driver: null, // called before every fixed step in Auto play
     nextId: 1,
   }
 }
 
-export function startRun(sim, seed = sim.seed + 1) {
+export function startRun(sim, seed = sim.seed + 1, { auto = false } = {}) {
   sim.seed = seed
+  sim.auto = auto
+  if (!auto) sim.driver = null
   sim.rand = mulberry32(seed)
   Object.assign(sim, {
     phase: 'running', paused: false, time: 0, dist: 0, speed: RUN.startSpeed,
@@ -68,6 +75,8 @@ export function startRun(sim, seed = sim.seed + 1) {
     gen: { n: 0, history: [], lastRow: null, lastPos: RUN.startSpeed * RUN.safeSeconds },
   })
   for (const o of sim.obstacles) o.active = false
+  for (const o of sim.orbs) { o.active = false; o.taken = false }
+  sim.orbCount = 0; sim.orbsSeen = 0
   sim.events.length = 0
   emit(sim, 'start')
   fillObstacles(sim)
@@ -82,8 +91,9 @@ export function resetToReady(sim) {
 }
 
 // ---- input commands ----------------------------------------------------------
-export function command(sim, cmd) {
+export function command(sim, cmd, fromBot = false) {
   if (sim.phase !== 'running' || sim.paused) return false
+  if (sim.auto && !fromBot) return false // Auto play is watch-only: player input is ignored
   if (cmd === 'left' || cmd === 'right') {
     const dir = cmd === 'left' ? -1 : 1
     if (sim.laneT < 0.5) { sim.queued = { dir, ttl: PLAYER.queueTime }; return false } // mid-glide: buffer ONE change
@@ -177,13 +187,44 @@ function place(sim, row, at) {
   }
 }
 
+function putOrb(sim, x, y, dist) {
+  const o = sim.orbs.find((q) => !q.active)
+  if (!o) return false
+  Object.assign(o, { active: true, taken: false, takenT: 0, x, y, dist, id: sim.nextId++ })
+  sim.orbsSeen++
+  return true
+}
+
+/**
+ * Orbs for the gap between two obstacle rows: a ground line in a lane that is open in both rows (so collecting it
+ * never asks for anything the rows do not already ask for), and a jump arc over every fallen pine. Orbs stay at least
+ * 3.2 m away from any row, so they never overlap an obstacle.
+ */
+function placeOrbs(sim, prevRow, prevPos, row, pos) {
+  const r = sim.rand
+  const from = prevPos + 3.2
+  const to = pos - 3.2
+  if (to - from >= (3 - 1) * ORBS.spacing && r() < ORBS.chance) {
+    const both = prevRow ? openLanes(prevRow).filter((l) => openLanes(row).includes(l)) : openLanes(row) // the first line also avoids the first wall's lane
+    const lanes = both.length ? both : openLanes(row)
+    const lane = lanes[Math.floor(r() * lanes.length)]
+    const n = Math.min(5, Math.floor((to - from) / ORBS.spacing) + 1)
+    const start = from + (to - from - (n - 1) * ORBS.spacing) / 2
+    for (let i = 0; i < n; i++) putOrb(sim, LANES[lane], ORBS.groundY, start + i * ORBS.spacing)
+  }
+  if (row.kind === 'ridge') for (const d of [-1.6, 0, 1.6]) putOrb(sim, LANES[1], ORBS.arcY, pos + d)
+}
+
 function fillObstacles(sim) {
   const g = sim.gen
   while (g.lastPos - sim.dist < RUN.spawnAhead) {
     const rows = nextPattern(g, sim.rand, difficulty(sim))
     for (const { row, gap } of rows) {
+      const prevRow = g.lastRow
+      const prevPos = g.lastPos
       g.lastPos += gap * speedAt(sim, g.lastPos)
       place(sim, row, g.lastPos)
+      placeOrbs(sim, prevRow, prevPos, row, g.lastPos)
       g.history.push(sig(row)); if (g.history.length > 8) g.history.shift()
       g.lastRow = row
       g.n++
@@ -207,7 +248,7 @@ function stepPlayer(sim, dt) {
   if (sim.queued) {
     sim.queued.ttl -= dt
     if (sim.queued.ttl <= 0) sim.queued = null
-    else if (sim.laneT >= 0.5) { const q = sim.queued.dir; sim.queued = null; command(sim, q < 0 ? 'left' : 'right') }
+    else if (sim.laneT >= 0.5) { const q = sim.queued.dir; sim.queued = null; command(sim, q < 0 ? 'left' : 'right', true) }
   }
   // vertical
   if (!sim.grounded) {
@@ -231,6 +272,23 @@ function stepPlayer(sim, dt) {
   sim.anim = !sim.grounded ? 'air' : sim.duck > 0 ? 'duck' : sim.landT > 0 ? 'land' : 'run'
 }
 
+const ob2 = {}
+/** Orbs are swept in z like obstacles; the body box (standing or ducked, in the air or not) must touch the orb's box. */
+function collectOrbs(sim, move) {
+  playerBox(sim, ob2)
+  for (const o of sim.orbs) {
+    if (!o.active) continue
+    const ahead = o.dist - sim.dist
+    if (o.taken) { o.takenT += STEP; if (o.takenT >= ORBS.popTime) o.active = false; continue }
+    if (ahead < -RUN.despawnBehind) { o.active = false; continue }
+    if (ob2.x1 <= o.x - ORBS.radius || ob2.x0 >= o.x + ORBS.radius) continue
+    if (ob2.y1 <= o.y - ORBS.radius || ob2.y0 >= o.y + ORBS.radius) continue
+    const lo = ahead - ORBS.radius
+    const hi = ahead + move + ORBS.radius
+    if (hi > -ob2.z1 && lo < -ob2.z0) { o.taken = true; o.takenT = 0; sim.orbCount++; emit(sim, 'orb') }
+  }
+}
+
 function stepOnce(sim, dt) {
   sim.time += dt
   sim.speed = Math.min(RUN.maxSpeed, sim.speed + RUN.accel * dt)
@@ -238,6 +296,7 @@ function stepOnce(sim, dt) {
   sim.dist += move
   stepPlayer(sim, dt)
   fillObstacles(sim)
+  collectOrbs(sim, move)
   const ducked = sim.duck > 0 && sim.grounded
   for (const o of sim.obstacles) {
     if (!o.active) continue
@@ -258,7 +317,7 @@ export function update(sim, dt) {
   if (sim.paused) return
   if (sim.phase === 'running') {
     sim.acc = (sim.acc ?? 0) + Math.min(dt, 0.05)
-    while (sim.acc >= STEP && sim.phase === 'running') { stepOnce(sim, STEP); sim.acc -= STEP }
+    while (sim.acc >= STEP && sim.phase === 'running') { if (sim.driver) sim.driver(sim); stepOnce(sim, STEP); sim.acc -= STEP }
   } else if (sim.phase === 'gameover') {
     // the world stays where the collision happened; Aisha is knocked back (visual) and the speed readout winds down
     const d = Math.min(dt, 0.05)

@@ -10,9 +10,11 @@ import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
 import { RunnerForest } from './scene/RunnerForest.jsx'
 import { Obstacles } from './scene/Obstacles.jsx'
+import { Orbs } from './scene/Orbs.jsx'
 import { RunnerAisha } from './scene/RunnerAisha.jsx'
 import { createSim, startRun, resetToReady, update, command, aheadOf } from './sim/sim.js'
 import { attachInput } from './sim/input.js'
+import { createBot, botStep } from './sim/bot.js'
 import { cameraFor, cameraTarget } from './sim/camera.js'
 import './runner.css'
 
@@ -56,12 +58,12 @@ function Shadow({ sim }) {
 }
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
-function Loop({ sim, onPhase, onScore, debug }) {
+function Loop({ sim, onPhase, onScore, onOrbs, debug }) {
   const gl = useThree((st) => st.gl)
   const scene = useThree((st) => st.scene)
   const cam = useThree((st) => st.camera)
   useEffect(() => { if (debug) { debug.gl = gl; debug.scene = scene; debug.camera = cam } }, [gl, scene, cam, debug])
-  const last = useRef({ phase: '', score: -1, paused: false })
+  const last = useRef({ phase: '', score: -1, orbs: -1, paused: false })
   const pos = useRef(new Vector3(0, 2.7, 5.6))
   const look = useRef(new Vector3(0, 0.6, -9))
   const tgt = useMemo(() => ({}), [])
@@ -99,6 +101,7 @@ function Loop({ sim, onPhase, onScore, debug }) {
     if (l.phase !== s.phase || l.paused !== s.paused) { l.phase = s.phase; l.paused = s.paused; onPhase(s.phase, s.paused) }
     const score = Math.floor(s.dist)
     if (score !== l.score && (score - l.score >= 1 || score === 0)) { l.score = score; onScore(score) }
+    if (s.orbCount !== l.orbs) { l.orbs = s.orbCount; onOrbs(s.orbCount) }
   })
   return null
 }
@@ -139,7 +142,7 @@ function HitBurst({ sim }) {
   return <points geometry={geo} material={mat} frustumCulled={false} />
 }
 
-function Scene({ sim, quality, onPhase, onScore, debug }) {
+function Scene({ sim, quality, onPhase, onScore, onOrbs, debug }) {
   return (
     <>
       <color attach="background" args={[FOG_COLOR]} />
@@ -147,7 +150,7 @@ function Scene({ sim, quality, onPhase, onScore, debug }) {
       <hemisphereLight args={['#c4d8f0', '#7d8796', 1.15]} />
       <ambientLight intensity={0.15} color="#b8c8e0" />
       <directionalLight position={SUN.clone().multiplyScalar(60).toArray()} color="#fff2de" intensity={2.5} />
-      <Loop sim={sim} onPhase={onPhase} onScore={onScore} debug={debug} />
+      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} debug={debug} />
       <Sky />
       <Ground sim={sim} />
       <Obstacles sim={sim} />
@@ -157,6 +160,7 @@ function Scene({ sim, quality, onPhase, onScore, debug }) {
       <Suspense fallback={null}>
         <RunnerForest sim={sim} quality={quality} />
         <RunnerAisha sim={sim} debug={debug} />
+        <Orbs sim={sim} />
         <Ready />
       </Suspense>
       <Suspense fallback={null}>
@@ -179,6 +183,11 @@ export default function RunnerGame() {
   const [paused, setPaused] = useState(false)
   const [score, setScore] = useState(0)
   const [best, setBest] = useState(() => { try { return Number(localStorage.getItem('frost-runner-best')) || 0 } catch { return 0 } })
+  const [orbs, setOrbs] = useState(0)
+  const [bestOrbs, setBestOrbs] = useState(() => { try { return Number(localStorage.getItem('frost-runner-best-orbs')) || 0 } catch { return 0 } })
+  const [auto, setAuto] = useState(false) // Auto play: watch-only, the bot drives
+  const autoTimer = useRef(0)
+  const bot = useRef(null)
   const [loaded, setLoaded] = useState(false)
   const [quality] = useState(detectQuality)
   const root = useRef(null)
@@ -193,8 +202,26 @@ export default function RunnerGame() {
     const s = sim.current
     if (s.phase === 'running') return
     if (s.phase === 'gameover' && performance.now() - hitAt.current < OVER_DELAY) return // no accidental instant restart (the panel is not up yet)
+    clearTimeout(autoTimer.current)
     startRun(s, (Math.random() * 1e9) | 0)
-    setScore(0)
+    setAuto(false); setScore(0); setOrbs(0)
+  }, [])
+  // Auto play: the same game, driven by sim/bot.js through command(); player input is ignored until Stop / Esc.
+  const startAuto = useCallback(() => {
+    const s = sim.current
+    if (s.phase === 'running' && !s.auto) return
+    clearTimeout(autoTimer.current)
+    bot.current = createBot()
+    startRun(s, (Math.random() * 1e9) | 0, { auto: true })
+    s.driver = (q) => botStep(q, bot.current)
+    setAuto(true); setScore(0); setOrbs(0)
+  }, [])
+  const exitAuto = useCallback(() => {
+    clearTimeout(autoTimer.current)
+    const s = sim.current
+    resetToReady(s)
+    s.auto = false; s.driver = null
+    setAuto(false); setScore(0); setOrbs(0)
   }, [])
   const togglePause = useCallback(() => {
     const s = sim.current
@@ -204,15 +231,20 @@ export default function RunnerGame() {
   const onPhase = useCallback((p, pz) => {
     setPhase(p); setPaused(pz)
     clearTimeout(overTimer.current)
-    if (p === 'gameover') {
+    if (p === 'gameover' && sim.current.auto) {
+      // the bot should not die; if it ever does, just start another demonstration run
+      autoTimer.current = setTimeout(() => { if (sim.current.auto && sim.current.phase === 'gameover') startAuto() }, 1500)
+    } else if (p === 'gameover') {
       hitAt.current = performance.now()
       overTimer.current = setTimeout(() => setShowOver(true), OVER_DELAY) // let the impact play out before the panel
+      const o = sim.current.orbCount
+      setBestOrbs((b) => { const nb = Math.max(b, o); try { localStorage.setItem('frost-runner-best-orbs', String(nb)) } catch { /* private mode */ } return nb })
       setScore((sc) => { setBest((b) => { const nb = Math.max(b, sc); try { localStorage.setItem('frost-runner-best', String(nb)) } catch { /* private mode */ } return nb }); return sc })
     } else {
       setShowOver(false)
     }
-  }, [])
-  useEffect(() => () => clearTimeout(overTimer.current), [])
+  }, [startAuto])
+  useEffect(() => () => { clearTimeout(overTimer.current); clearTimeout(autoTimer.current) }, [])
 
   useEffect(() => {
     const el = root.current
@@ -222,7 +254,9 @@ export default function RunnerGame() {
       {
         onKey: (e) => {
           const s = sim.current
+          if (s.auto && e.code === 'Escape') { if (!e.repeat) exitAuto(); return true } // Esc leaves Auto play
           if (e.code === 'Escape' || e.code === 'KeyP') { if (!e.repeat) togglePause(); return true }
+          if (s.auto) return false // watch-only: every other key is ignored by command()
           if (s.phase !== 'running' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) { if (!e.repeat) start(); return true }
           if (s.phase === 'running' && s.paused && e.code === 'Enter') { if (!e.repeat) togglePause(); return true }
           return false
@@ -235,11 +269,11 @@ export default function RunnerGame() {
     el.addEventListener('touchmove', prevent, { passive: false })
     document.title = 'Frost — Run'
     return () => { detach(); document.removeEventListener('visibilitychange', hide); el.removeEventListener('touchmove', prevent) }
-  }, [start, togglePause])
+  }, [start, togglePause, exitAuto])
 
   useEffect(() => {
-    if (debug) window.__frostRunner = { sim: sim.current, command: (c) => command(sim.current, c), start, reset: () => resetToReady(sim.current), debug }
-  }, [debug, start])
+    if (debug) window.__frostRunner = { sim: sim.current, command: (c) => command(sim.current, c), start, startAuto, exitAuto, reset: () => resetToReady(sim.current), debug }
+  }, [debug, start, startAuto, exitAuto])
 
   return (
     <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded}>
@@ -248,13 +282,16 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
       >
-        <Scene sim={sim} quality={quality} onPhase={onPhase} onScore={setScore} debug={debug} />
+        <Scene sim={sim} quality={quality} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} debug={debug} />
       </Canvas>
 
       <div className="runner-hud" aria-live="polite">
         <span className="runner-score">{score} m</span>
-        {best > 0 && <span className="runner-best">Best {best} m</span>}
-        {phase === 'running' && <button className="runner-pause" onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶' : 'Ⅱ'}</button>}
+        <span className="runner-orbs" aria-label={`${orbs} orbs`}><i aria-hidden="true" />{orbs}</span>
+        {best > 0 && !auto && <span className="runner-best">Best {best} m</span>}
+        {auto && <span className="runner-auto" data-testid="auto-badge">Auto play</span>}
+        {auto && <button className="runner-stop" onClick={exitAuto}>Stop</button>}
+        {phase === 'running' && !auto && <button className="runner-pause" onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶' : 'Ⅱ'}</button>}
       </div>
 
       {!loaded && <div className="runner-screen"><p className="runner-loading">Loading Frost…</p></div>}
@@ -264,6 +301,8 @@ export default function RunnerGame() {
           <h1>Frost</h1>
           <p className="runner-tag">Run the snowy trail with Aisha</p>
           <button className="runner-btn" onClick={start} autoFocus>Start run</button>
+          <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
+          <p className="runner-hint">Auto play: watch Aisha run by herself</p>
           <ul className="runner-help">
             <li><b>← →</b> / A D · swipe: change lane</li>
             <li><b>↑</b> / W / Space · swipe up: jump</li>
@@ -285,6 +324,7 @@ export default function RunnerGame() {
           <h2>You hit the ice</h2>
           <p className="runner-label">Distance</p>
           <p className="runner-final">{score}<small> m</small></p>
+          <p className="runner-orbs-final"><i aria-hidden="true" />{orbs} {orbs === 1 ? 'orb' : 'orbs'}{bestOrbs > 0 && orbs >= bestOrbs ? ' · best!' : ''}</p>
           <p className="runner-tag">{best > 0 && score >= best ? 'New best!' : `Best ${best} m`}</p>
           <button className="runner-btn" onClick={start} autoFocus>Restart</button>
           <p className="runner-hint">Enter · Space · R</p>
