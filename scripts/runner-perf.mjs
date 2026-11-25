@@ -6,6 +6,8 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
 const base = process.argv[2] ?? 'http://127.0.0.1:4173'
+const worldArg = process.argv.find((a) => a.startsWith('--world='))?.slice(8) // e.g. --world=02 measures that world
+const worldQuery = worldArg ? `&world=${worldArg}` : ''
 const budgetMode = process.argv.includes('--budget') // fail (exit 1) when over the mobile budget
 // Mobile budget (per frame, 'everything' row): see docs/FROST.md
 export const BUDGET = { triangles: 350_000, calls: 30 }
@@ -16,7 +18,7 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 async function measure(name, viewport, mobile) {
   const ctx = await browser.newContext({ viewport, hasTouch: mobile, isMobile: mobile })
   const page = await ctx.newPage()
-  await page.goto(`${base}/?game=frost&debug`)
+  await page.goto(`${base}/?game=frost&debug${worldQuery}`)
   await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
   await sleep(800)
   await page.keyboard.press('Enter')
