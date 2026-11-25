@@ -6,8 +6,7 @@ import { useMemo } from 'react'
 import { CanvasTexture, ClampToEdgeWrapping, MirroredRepeatWrapping, SRGBColorSpace } from 'three'
 
 const DISTANCE = 520
-const HEIGHT = 250
-const ASPECT = 941 / (1672 * 0.42) // image width / height of the cropped band
+const HEIGHT = 340 // the lower ~60% of the band is on screen; a taller plane means fewer mirrored repeats (fewer seams)
 
 function fadeTexture() {
   const c = document.createElement('canvas'); c.width = 4; c.height = 64
@@ -34,7 +33,7 @@ export function Backdrop({ url, crop = 0.42 }) {
     map.needsUpdate = true
     return { map, fade: fadeTexture(), width, repeat }
   }, [painting, crop])
-  void ASPECT; void repeat
+  void repeat
   return (
     <mesh position={[0, HEIGHT / 2 - 6, -DISTANCE]} frustumCulled={false} renderOrder={-1}>
       <planeGeometry args={[width, HEIGHT]} />

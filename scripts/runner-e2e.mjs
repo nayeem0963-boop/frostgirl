@@ -31,13 +31,13 @@ const sleep = async (ms) => {
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })
 
-async function open(viewport, mobile = false) {
+async function open(viewport, mobile = false, query = '') {
   const ctx = await browser.newContext({ viewport, hasTouch: mobile, isMobile: mobile, deviceScaleFactor: 1 })
   const page = await ctx.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
-  await page.goto(`${base}/?game=frost&debug`)
+  await page.goto(`${base}/?game=frost&debug${query}`)
   await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
   await realSleep(800)
   active = page
@@ -270,6 +270,28 @@ if (want('auto')) {
   await page.keyboard.press('Escape'); await sleep(300)
   check('Esc leaves Auto play', (await page.locator('[data-screen="start"]').isVisible()) && (await sim(page)).phase === 'ready')
   check('no page errors (orbs / Auto play)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+// ------------------------------------------------------------------ worlds
+if (want('worlds')) {
+  const names = { '01': 'Frozen Kingdom', '02': 'Whispering Ice Forest', '03': 'Crystal Mountains', '04': 'Frozen Ocean', '05': 'Frosted Dream Desert', '06': 'Sky of Aurora', '07': 'Celestial Ice Palace' }
+  const looks = new Map()
+  for (const id of Object.keys(names)) {
+    const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, id === '01' ? '' : `&world=${id}`)
+    await page.getByRole('button', { name: 'Auto play' }).click()
+    for (let i = 0; i < 4000; i++) { const t = await S(page, () => window.__frostRunner.sim.time); if (t >= 4) break; await realSleep(40) }
+    const st = await S(page, () => { const s = window.__frostRunner.sim; return { phase: s.phase, finish: s.world.finishDistance, title: document.title, pose: window.__frostRunner.debug.pose } })
+    const bg = await S(page, () => { const sc = window.__frostRunner.debug.scene; return { fog: sc.fog.color.getHexString(), bgc: sc.background.getHexString() } })
+    looks.set(id, bg.fog)
+    check(`[world ${id}] ${names[id]} loads and runs`, st.phase === 'running' && errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, `${st.title}, finish ${st.finish} m${errors.length ? ', errors: ' + errors.slice(0, 2).join(' | ') : ''}`)
+    await page.screenshot({ path: `${out}/world-${id}.png` })
+    await ctx.close()
+  }
+  check('each world has its own fog/sky colour', new Set(looks.values()).size === 7, [...looks.values()].join(' '))
+  // an unknown id falls back to World 01
+  const { ctx, page } = await open({ width: 800, height: 450 }, false, '&world=99')
+  check('an unknown world id falls back to World 01', (await S(page, () => window.__frostRunner.debug.scene.fog.color.getHexString())) === 'c9d6e3')
   await ctx.close()
 }
 
