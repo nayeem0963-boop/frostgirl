@@ -1,5 +1,7 @@
+import { runnerThemes } from './runnerThemes.js'
+
 const background = (filename) =>
-  `${import.meta.env.BASE_URL}assets/backgrounds/worlds/${filename}`
+  `${import.meta.env?.BASE_URL ?? '/'}assets/backgrounds/worlds/${filename}` // (optional chaining: lets Node tests import the registry)
 
 const futureWorld = (id, name, filename, palette) => ({
   id,
@@ -14,6 +16,7 @@ const futureWorld = (id, name, filename, palette) => ({
   difficulty: null,
   music: null,
   specialEffects: [],
+  runner: runnerThemes[id], // the Frost runner's per-world theme, patterns and finish distance (src/worlds/runnerThemes.js)
 })
 
 export const worlds = [

@@ -1,11 +1,12 @@
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { BackSide, Color, ShaderMaterial, Vector3 } from 'three'
 
 export const SUN_DIR = new Vector3(-0.42, 0.36, 0.83).normalize() // low afternoon sun, behind-left of the climb
 export const FOG_COLOR = new Color('#c9d6e3')
 
-export function Sky() {
+/** `colors` = {zenith, mid, horizon, sun} (hex). Defaults are the Frost expedition's sky. */
+export function Sky({ colors } = {}) {
   const ref = useRef()
   const material = useMemo(() => new ShaderMaterial({
     side: BackSide,
@@ -45,6 +46,13 @@ export function Sky() {
         #include <colorspace_fragment>
       }`,
   }), [])
+  useEffect(() => {
+    if (!colors) return
+    material.uniforms.uZenith.value.set(colors.zenith)
+    material.uniforms.uMid.value.set(colors.mid)
+    material.uniforms.uHorizon.value.set(colors.horizon)
+    material.uniforms.uSunColor.value.set(colors.sun)
+  }, [colors, material])
   useFrame(({ camera }) => { if (ref.current) ref.current.position.copy(camera.position) })
   return (
     <mesh ref={ref} material={material} frustumCulled={false} renderOrder={-1}>

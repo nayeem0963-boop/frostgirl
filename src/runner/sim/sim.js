@@ -2,6 +2,7 @@
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
 import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS } from '../config.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
+import { themeFor } from '../../worlds/runnerThemes.js'
 
 export const STEP = 1 / 120
 export const POOL = 24
@@ -27,8 +28,9 @@ function emit(sim, name) {
   sim.count[name] = (sim.count[name] ?? 0) + 1
 }
 
-export function createSim(seed = 1) {
+export function createSim(seed = 1, world = themeFor('01')) {
   return {
+    world, // this world's runner data (pattern weights, finish distance, ...): src/worlds/runnerThemes.js
     phase: 'ready', // ready | running | gameover
     paused: false,
     seed,
@@ -172,7 +174,7 @@ function standBlocked(sim) {
 }
 
 // ---- spawner -----------------------------------------------------------------
-const difficulty = (sim) => Math.min(1, sim.time / DIFFICULTY_SECONDS)
+const difficulty = (sim) => Math.min(1, sim.time / (sim.world.difficultySeconds ?? DIFFICULTY_SECONDS))
 const speedAt = (sim, pos) => Math.min(RUN.maxSpeed, sim.speed + (RUN.accel * Math.max(0, pos - sim.dist)) / Math.max(sim.speed, 1))
 
 function place(sim, row, at) {
@@ -218,7 +220,7 @@ function placeOrbs(sim, prevRow, prevPos, row, pos) {
 function fillObstacles(sim) {
   const g = sim.gen
   while (g.lastPos - sim.dist < RUN.spawnAhead) {
-    const rows = nextPattern(g, sim.rand, difficulty(sim))
+    const rows = nextPattern(g, sim.rand, difficulty(sim), sim.world.patternWeights)
     for (const { row, gap } of rows) {
       const prevRow = g.lastRow
       const prevPos = g.lastPos

@@ -9,7 +9,7 @@ import { getRockAssets } from './Rocks.jsx'
 import { getSnowflakeTexture } from './textures.js'
 
 /** Wind-blown snowfall in a box that follows the camera. */
-export function Snowfall({ count = 1600, paused }) {
+export function Snowfall({ count = 1600, paused, color = '#ffffff' }) {
   const ref = useRef()
   const { geometry, seeds } = useMemo(() => {
     const pos = new Float32Array(count * 3)
@@ -25,8 +25,8 @@ export function Snowfall({ count = 1600, paused }) {
     return { geometry: g, seeds }
   }, [count])
   const material = useMemo(() => new PointsMaterial({
-    size: 0.09, map: getSnowflakeTexture(), transparent: true, opacity: 0.9, depthWrite: false, color: '#ffffff', sizeAttenuation: true,
-  }), [])
+    size: 0.09, map: getSnowflakeTexture(), transparent: true, opacity: 0.9, depthWrite: false, color, sizeAttenuation: true,
+  }), [color])
   useFrame(({ camera, clock }, raw) => {
     if (paused) return
     const dt = Math.max(0, Math.min(raw, 0.05))
