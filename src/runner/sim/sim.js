@@ -1,6 +1,6 @@
 // Pure runner simulation (no React / three): state machine, player physics,
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
-import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL } from '../config.js'
+import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF } from '../config.js'
 import { starsFor } from '../progress.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
@@ -180,13 +180,21 @@ function standBlocked(sim) {
 const difficulty = (sim) => Math.min(1, sim.time / (sim.world.difficultySeconds ?? DIFFICULTY_SECONDS))
 const speedAt = (sim, pos) => Math.min(RUN.maxSpeed, sim.speed + (RUN.accel * Math.max(0, pos - sim.dist)) / Math.max(sim.speed, 1))
 
+/** x of a lunging wolf: waits beside the trail, runs into its lane between WOLF.lungeFrom and WOLF.lungeTo metres ahead. */
+export function wolfProgress(ahead) {
+  const t = Math.min(1, Math.max(0, (WOLF.lungeFrom - ahead) / (WOLF.lungeFrom - WOLF.lungeTo)))
+  return t * t * (3 - 2 * t)
+}
+export const wolfX = (o, ahead) => { const a = o.side * WOLF.sideX; return a + (LANES[o.lane] - a) * wolfProgress(ahead) }
+
 function place(sim, row, at) {
-  const slots = row.kind === 'wall' ? row.lanes : [1]
+  const slots = row.kind === 'wall' || row.kind === 'wolf' ? row.lanes : [1]
   for (const lane of slots) {
     const o = sim.obstacles.find((q) => !q.active)
     if (!o) return
     o.active = true; o.kind = row.kind; o.id = sim.nextId++
-    o.x = row.kind === 'wall' ? LANES[lane] : 0
+    o.lane = lane; o.side = lane === 0 ? -1 : lane === 2 ? 1 : (row.side ?? 1) // each wolf comes from its nearer edge
+    o.x = row.kind === 'wall' ? LANES[lane] : row.kind === 'wolf' ? o.side * WOLF.sideX : 0
     o.dist = at
     o.row = sim.gen.n
   }
@@ -311,6 +319,7 @@ function stepOnce(sim, dt) {
     const prev = o.dist - (sim.dist - move)
     const ahead = o.dist - sim.dist
     if (ahead < -RUN.despawnBehind) { o.active = false; continue }
+    if (o.kind === 'wolf') o.x = wolfX(o, ahead) // the collider follows the visible wolf
     if (hits(sim, o, prev, ahead, ducked)) {
       sim.phase = 'gameover'; sim.anim = 'hurt'; sim.hit = { id: o.id, kind: o.kind, x: o.x, dist: o.dist }
       sim.hitT = 0; sim.vx = 0

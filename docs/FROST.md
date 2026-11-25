@@ -1,3 +1,29 @@
+# Frost — Phase 5.1: World 02's wolf
+
+Phase 5 gives each world a signature hazard, one PR per world. **Whispering Ice Forest** gets the wolf (`public/assets/expedition/wolf.glb`:
+rigged, `run` 0.38 s and `walk` 0.67 s clips, ~10k triangles, faces +z, 1.62 m tall at scale 1; drawn at 0.8 = 1.3 m).
+
+- **Behaviour**: it waits just outside the trail (x = 5.6 m, from the nearer edge), starts to run when it is 26 m ahead of Aisha, and is
+  in its lane at 14 m ahead, then holds there facing her. It blocks that lane like a wall, but it is only 1.0 m high (collider), so a
+  jump at the usual moment clears it too. `WOLF` and `OBSTACLES.wolf` in `config.js`.
+- **The collider follows the visible wolf** (sim obstacle kind `wolf`: its `x` is recomputed every step from `wolfX`, so what you see
+  is what can hurt you; no collision is possible before it settles because it is 14+ m away while it moves). At top speed, the 14 m
+  left after the lunge is 1.12 s: more than the generator's worst case for two lane changes (`REACTION + 2 x SHIFT_TIME` = 0.93 s;
+  unit-tested).
+- **Generator** (`sim/patterns.js`): wolves count as lane blockers for every fairness rule (`openLanes`, `minGap`, no row blocks all
+  three lanes). New patterns `wolf`, `wolfWall`, `wolfPair` are *opt-in*: a world's weight for them is a number, not a multiplier, and
+  missing means never. Only World 02 turns them on (`hazards: { wolf: true }` and weights in `runnerThemes.js`), so **World 01's
+  generated rows are unchanged** (the 4.2 pin still passes) and no other world sees a wolf.
+- **Rendering** (`scene/Wolves.jsx`): skinned meshes cannot be instanced, so 3 clones are pooled; they pace at the edge, run during the
+  lunge, and hold a slowed `walk` stance once in the lane. The model is only downloaded in worlds with the hazard (World 01 never
+  requests it; tested). Game-over text: "The wolf got you".
+- **Auto play** treats a wolf like a wall (it uses the wolf's stored lane, not its moving x); the bot finishes World 02 on 4 seeds and
+  meets 10+ wolves per level (`tests/wolf.test.js`).
+
+Not done: the wolf has no sound or howl yet, no ground telegraph beyond its own run-in, and it is not drawn with eyes or breath effects.
+
+---
+
 # Frost — data-driven worlds (PR 4.2)
 
 `?game=frost&world=01..07` picks the world the runner renders (default `01`; unknown ids fall back to `01`). The world-select

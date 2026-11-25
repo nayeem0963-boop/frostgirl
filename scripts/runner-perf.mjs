@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
 const base = process.argv[2] ?? 'http://127.0.0.1:4173'
 const worldArg = process.argv.find((a) => a.startsWith('--world='))?.slice(8) // e.g. --world=02 measures that world
-const worldQuery = worldArg ? `&world=${worldArg}` : ''
+const worldQuery = worldArg ? `&world=${worldArg}&unlock=all` : ''
 const budgetMode = process.argv.includes('--budget') // fail (exit 1) when over the mobile budget
 // Mobile budget (per frame, 'everything' row): see docs/FROST.md
 export const BUDGET = { triangles: 350_000, calls: 30 }
@@ -58,10 +58,22 @@ async function measure(name, viewport, mobile) {
     out.push(await read('without snowfall', (o) => o.isPoints))
     out.push(await read('without Aisha', (o) => o.isSkinnedMesh))
     out.push(await read('only Aisha', (o) => (o.isMesh || o.isPoints || o.isInstancedMesh) && !o.isSkinnedMesh))
+    const savedDist = window.__frostRunner.sim.dist // the extra measurements below move Aisha around; restore her afterwards
     // the same frame with the finish gate in view (it is hidden for most of a level): must stay within the budget too
     window.__frostRunner.sim.dist = window.__frostRunner.sim.world.finishDistance - 40
     await frames(8)
     out.push(await read('everything, finish gate in view'))
+    // a world with a signature hazard: measure it on screen too (World 02: two wolves, one of them mid-lunge)
+    const sm = window.__frostRunner.sim
+    if (sm.world.hazards?.wolf) {
+      sm.dist = 0; sm.gen.lastPos = 1e9
+      for (const o of sm.obstacles) o.active = false
+      const put = (lane, side, ahead, id) => { const o = sm.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'wolf', lane, side, dist: sm.dist + ahead, id, x: side * 5.6 }) }
+      put(0, -1, 18, 9101); put(2, 1, 30, 9102)
+      await frames(3)
+      out.push(await read('everything, wolves in view'))
+    }
+    { const q = window.__frostRunner.sim; q.dist = savedDist; q.phase = 'running'; q.gen.lastPos = q.dist + 20; for (const o of q.obstacles) o.active = false }
     d.gl.info.autoReset = true
     const i = d.gl.info
     return { out, geometries: i.memory.geometries, textures: i.memory.textures, simMs: d.simMs, heap: performance.memory?.usedJSHeapSize }

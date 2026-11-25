@@ -6,10 +6,12 @@
 //   needed time = REACTION + lane shifts * SHIFT_TIME.
 export const REACTION = 0.45
 export const SHIFT_TIME = 0.24
-export const ACTION_RECOVER = { wall: 0, ridge: 1.15, arch: 1.1 } // min seconds between an action row and the next row
+export const ACTION_RECOVER = { wall: 0, wolf: 0, ridge: 1.15, arch: 1.1 } // min seconds between an action row and the next row
 
 const ALL = [0, 1, 2]
-export const openLanes = (row) => (row.kind === 'wall' ? ALL.filter((l) => !row.lanes.includes(l)) : ALL)
+/** Lanes a row leaves open: walls and wolves block their lanes, ridges and arches (jump / duck rows) block none. */
+export const blocksLanes = (row) => row.kind === 'wall' || row.kind === 'wolf'
+export const openLanes = (row) => (blocksLanes(row) ? ALL.filter((l) => !row.lanes.includes(l)) : ALL)
 const needsAction = (row) => row.kind !== 'wall'
 
 /** Worst-case lane shifts needed to get from any lane in `from` to some lane in `to`. */
@@ -39,6 +41,7 @@ export const sig = (row) => `${row.kind}:${row.lanes.join('')}`
 
 // Patterns are sequences of rows; later rows of a pattern use `gapScale` of the base gap (never below minGap).
 function patterns(r, d, n, last, w = {}) {
+  const sideOf = (l) => (l === 0 ? -1 : l === 2 ? 1 : (r() < 0.5 ? -1 : 1)) // a wolf comes from the nearer edge of the trail (lane 1: either)
   const lane = () => Math.floor(r() * 3)
   const pick = (arr) => arr[Math.floor(r() * arr.length)]
   const list = []
@@ -53,6 +56,11 @@ function patterns(r, d, n, last, w = {}) {
   add('wallRidge', d > 0.3 ? 1.5 : 0, () => [{ kind: 'wall', lanes: [lane()] }, { kind: 'ridge', lanes: ALL }])
   add('archWall', d > 0.45 ? 1.5 : 0, () => [{ kind: 'arch', lanes: ALL }, { kind: 'wall', lanes: [lane()] }])
   add('zigzag', d > 0.6 ? 1.2 : 0, () => { const open = lane(); const open2 = pick(ALL.filter((l) => l !== open)); return [{ kind: 'wall', lanes: ALL.filter((l) => l !== open) }, { kind: 'wall', lanes: ALL.filter((l) => l !== open2) }] })
+  // Hazards that only some worlds use: their weight is the world's own number (0 / missing = never), not a multiplier.
+  const opt = (id, weight, make) => { const m = w[id] ?? 0; if (weight > 0 && m > 0) list.push({ weight: weight * m, make }) }
+  opt('wolf', d > 0.06 && n > 2 ? 2 : 0, () => { const l = lane(); return [{ kind: 'wolf', lanes: [l], side: sideOf(l) }] })
+  opt('wolfWall', d > 0.2 ? 1.6 : 0, () => { const a = lane(); const b = pick(ALL.filter((l) => l !== a)); return [{ kind: 'wolf', lanes: [a], side: sideOf(a) }, { kind: 'wall', lanes: [b] }] })
+  opt('wolfPair', d > 0.4 ? 1.3 : 0, () => { const open = lane(); return [{ kind: 'wolf', lanes: ALL.filter((l) => l !== open), side: sideOf(1) }] }) // two wolves side by side, one lane open
   void last
   return list
 }

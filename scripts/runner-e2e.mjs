@@ -464,6 +464,64 @@ if (want('select')) {
   }
 }
 
+// ------------------------------------------------------------------ World 02: the wolf (Phase 5.1)
+if (want('wolf')) {
+  const shownSkinned = (page) => S(page, () => { const sc = window.__frostRunner.debug.scene; let n = 0; sc.traverse((o) => { if (!o.isSkinnedMesh) return; let v = true; for (let p = o; p; p = p.parent) if (!p.visible) v = false; if (v) n++ }); return n })
+  const putWolf = (page, lane, side, ahead) => S(page, ([lane, side, ahead]) => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'wolf', lane, side, dist: s.dist + ahead, id: 7000 + Math.random(), x: side * 5.6 }) }, [lane, side, ahead])
+  const wolfAhead = (page) => S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => q.active && q.kind === 'wolf'); return o ? { ahead: o.dist - s.dist, x: o.x, lane: o.lane } : null })
+  const waitAhead = async (page, at) => { for (let i = 0; i < 6000; i++) { const w = await wolfAhead(page); if (!w || w.ahead <= at) return w; await realSleep(10) } return null }
+  // World 01 never loads the wolf
+  {
+    const { ctx, page } = await open({ width: 640, height: 360 })
+    const files = await S(page, () => performance.getEntriesByType('resource').map((r) => r.name))
+    check('World 01 never downloads the wolf', !files.some((f) => /wolf\.glb/.test(f)))
+    check('World 01 draws only Aisha as a skinned mesh', (await shownSkinned(page)) === 1)
+    await ctx.close()
+  }
+  const { ctx, page, errors } = await open({ width: 960, height: 540 }, false, '&world=02&unlock=all')
+  const files = await S(page, () => performance.getEntriesByType('resource').map((r) => r.name))
+  check('World 02 loads the wolf model', files.some((f) => /wolf\.glb/.test(f)))
+  await page.keyboard.press('Enter'); await sleep(500); await clear(page)
+  await putWolf(page, 1, 1, 46)
+  let w = await waitAhead(page, 34)
+  check('the wolf waits at the edge of the trail before it lunges', w && Math.abs(w.x) > 5.5, JSON.stringify(w))
+  check('the wolf is drawn (an animated skinned model besides Aisha)', (await shownSkinned(page)) >= 2)
+  w = await waitAhead(page, 20)
+  check('mid-lunge it is between the edge and its lane', w && Math.abs(w.x) < 5.5 && Math.abs(w.x) > 0.01, JSON.stringify(w))
+  await page.screenshot({ path: `${out}/14-wolf-lunge.png` })
+  w = await waitAhead(page, 13)
+  check('14 m before Aisha it is in its lane', w && Math.abs(w.x - 0) < 0.05, JSON.stringify(w))
+  await page.screenshot({ path: `${out}/15-wolf-in-lane.png` })
+  // dodge it
+  await page.keyboard.press('ArrowLeft'); await sleep(2500)
+  check('switching lanes dodges the wolf', (await sim(page)).phase === 'running')
+  // run into one
+  await clear(page); await S(page, () => window.__frostRunner.command('right')); await sleep(500)
+  await putWolf(page, (await sim(page)).lane, 1, 40)
+  await page.waitForSelector('[data-screen="gameover"]', { timeout: 120000 })
+  check('running into the wolf ends the run with its own message', /The wolf got you/.test(await page.locator('[data-screen="gameover"] h2').innerText()))
+  await page.screenshot({ path: `${out}/16-wolf-game-over.png` })
+  check('no page errors (wolf)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('wolf')) {
+  // Auto play in World 02 meets real wolves and survives
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=02&unlock=all')
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  let met = 0, last = 0
+  for (let i = 0; i < 12000; i++) {
+    const st = await S(page, () => { const s = window.__frostRunner.sim; return { t: s.time, ph: s.phase, wolves: new Set(s.obstacles.filter((o) => o.active && o.kind === 'wolf').map((o) => o.id)).size } })
+    if (st.wolves > met) met = st.wolves
+    last = st
+    if (st.t >= 40 || st.ph !== 'running') break
+    await realSleep(60)
+  }
+  check('Auto play survives 40 s of World 02 with wolves', last.ph === 'running' && last.t >= 40, `t ${last.t.toFixed(1)} s, up to ${met} wolves on the trail at once`)
+  check('no page errors (World 02 Auto play)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
 // ------------------------------------------------------------------ phone portrait: swipes
 async function phone(viewport, tag) {
   const { ctx, page, errors } = await open(viewport, true)
