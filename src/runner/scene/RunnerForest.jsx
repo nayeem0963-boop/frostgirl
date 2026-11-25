@@ -10,7 +10,7 @@ import { ASSETS } from '../../expedition/assets.js'
 import { SLOTS_PER_SIDE, VARIANTS, groundY, slotAhead, treeAt } from './scenery.js'
 
 // metres ahead of Aisha: LOD0 (~8k tris) up to NEAR, LOD1 (~1.5k) up to MID, LOD2 (~200) beyond. Phones get tighter ranges.
-const LODS = { high: [30, 90], low: [16, 60] }
+const LODS = { high: [24, 80], low: [14, 55] }
 const BEHIND_CAMERA = 9 // the camera sits ~6 m behind Aisha: trees further back are never drawn
 
 export function RunnerForest({ sim, quality }) {

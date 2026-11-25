@@ -54,4 +54,5 @@ export const ORBS = {
   chance: 0.85, // probability that a gap between two obstacle rows gets a line
   popTime: 0.25, // collected orbs shrink away over this long
   spawnAhead: 75,
+  drawAhead: 55, // orbs further than this are not drawn (mobile triangle budget)
 }

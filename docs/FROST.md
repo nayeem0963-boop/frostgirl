@@ -1,3 +1,21 @@
+# Frost — mobile budget (PR 4.1)
+
+Budget for the runner, per frame, on the phone profile and desktop: **<= 350k triangles and <= 30 draw calls**, aiming for
+60 fps with a 30 fps floor on phones. Check it with `npm run build && npx vite preview --port 4173` then `npm run test:budget`
+(`scripts/runner-perf.mjs --budget`; exits 1 when over budget). Counts are renderer facts; headless software GL gives no usable
+frame times, so real-device frame rates still need a phone.
+
+| | before (Phase 3) | now |
+| --- | --- | --- |
+| Desktop 1534x630 | 28 calls, 408k triangles | 27 calls, 318k |
+| Phone portrait 390x844 | 27 calls, 329k | 27 calls, 269k |
+
+What changed: the orb's three 760-triangle spheres became a low-poly shell and core (the middle shell was hidden inside the
+outer one and is skipped; crystals unchanged; 2,440 -> ~560 triangles), orbs are only drawn within 55 m, and desktop pine
+LODs switch earlier (24 m / 80 m). Fixed cost: mountain massif ~83k, Aisha ~48k. Everything a new world adds must fit the same budget.
+
+---
+
 # Frost — Phase 3: Orbs of Chi and Auto play (runner)
 
 **Orbs of Chi.** Collectibles built from the repo's `public/assets/collectibles/orb_of_chi.glb` (2,440 triangles, three

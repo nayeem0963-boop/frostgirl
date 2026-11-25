@@ -6,6 +6,10 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { chromium } = require('playwright')
 const base = process.argv[2] ?? 'http://127.0.0.1:4173'
+const budgetMode = process.argv.includes('--budget') // fail (exit 1) when over the mobile budget
+// Mobile budget (per frame, 'everything' row): see docs/FROST.md
+export const BUDGET = { triangles: 350_000, calls: 30 }
+const failures = []
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-precise-memory-info'] })
 
@@ -63,6 +67,10 @@ async function measure(name, viewport, mobile) {
   const frames = await page.evaluate(() => window.__frostRunner.debug.frames)
   console.log(`\n== ${name} ${viewport.width}x${viewport.height}`)
   for (const r of stats.out) console.log(`  ${r.label.padEnd(18)} draw calls ${String(r.calls).padStart(3)}   triangles ${String(r.triangles).padStart(7)}   points ${r.points}`)
+  const all = stats.out.find((r) => r.label === 'everything')
+  const ok = all.triangles <= BUDGET.triangles && all.calls <= BUDGET.calls
+  console.log(`  budget (<= ${BUDGET.triangles / 1000}k triangles, <= ${BUDGET.calls} draw calls): ${ok ? 'OK' : 'OVER'}`)
+  if (!ok) failures.push(`${name}: ${all.calls} draw calls, ${all.triangles} triangles`)
   console.log(`  geometries ${stats.geometries}, textures ${stats.textures}`)
   console.log(`  JS sim+camera step per frame: ${stats.simMs?.toFixed(3)} ms (moving average)`)
   console.log(`  JS heap: ${(heap0 / 1e6).toFixed(1)} MB -> ${(heap1 / 1e6).toFixed(1)} MB over 8 s of play (${frames} frames rendered)`)
@@ -71,3 +79,4 @@ async function measure(name, viewport, mobile) {
 await measure('desktop', { width: 1534, height: 630 }, false)
 await measure('phone portrait', { width: 390, height: 844 }, true)
 await browser.close()
+if (failures.length) { console.log(`\nOVER BUDGET: ${failures.join('; ')}`); if (budgetMode) process.exit(1) } else console.log('\nwithin the mobile budget')
