@@ -95,3 +95,19 @@
 .runner-world { margin: 0; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
 .runner-next { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 @media (max-height: 460px) { .runner-progress { top: calc(max(8px, env(safe-area-inset-top)) + 40px); } .runner-done .runner-world, .runner-done .runner-hint { display: none; } .stars-big { font-size: 34px; } }
+
+/* world select (4.4) */
+.runner-select { justify-content: flex-start; padding-top: clamp(14px, 5vh, 44px); overflow-y: auto; gap: 8px; }
+.runner-worlds { list-style: none; margin: 4px 0; padding: 0; width: min(560px, 94vw); display: grid; gap: 8px; }
+.runner-card {
+  position: relative; width: 100%; min-height: 64px; padding: 10px 14px; border: 2px solid rgba(255, 255, 255, 0.55); border-radius: 14px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; text-align: left; color: #fff;
+  background: linear-gradient(90deg, rgba(10, 30, 65, 0.88), rgba(10, 30, 65, 0.45)), var(--art) center top / cover;
+  font: inherit; text-shadow: 0 1px 4px rgba(0, 10, 30, 0.8);
+}
+.runner-card.current { border-color: #8fe3ff; box-shadow: 0 0 0 2px rgba(143, 227, 255, 0.45); }
+.runner-card.locked { cursor: not-allowed; filter: grayscale(0.85) brightness(0.7); }
+.runner-card:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.runner-card-name { font-size: 17px; font-weight: 700; }
+.runner-card-meta { font-size: 13px; opacity: 0.95; }
+@media (max-height: 460px) { .runner-worlds { grid-template-columns: 1fr 1fr; width: min(760px, 94vw); } .runner-card { min-height: 52px; padding: 6px 10px; } .runner-select h2 { font-size: 22px; } }

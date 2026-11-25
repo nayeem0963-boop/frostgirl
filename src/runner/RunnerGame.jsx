@@ -10,9 +10,10 @@ import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
 import { FinishGate } from './scene/FinishGate.jsx'
-import { pickWorld } from './worlds.js'
-import { loadProgress, saveProgress, recordRun, nextWorldId } from './progress.js'
+import { pickWorld, unlockAllRequested } from './worlds.js'
+import { loadProgress, saveProgress, recordRun, nextWorldId, describeWorlds } from './progress.js'
 import { worldIds } from '../worlds/runnerThemes.js'
+import { worlds as allWorlds } from '../worlds/config.js'
 import { RunnerForest } from './scene/RunnerForest.jsx'
 import { Obstacles } from './scene/Obstacles.jsx'
 import { Orbs } from './scene/Orbs.jsx'
@@ -195,16 +196,20 @@ function Stars({ n, big }) {
 
 export default function RunnerGame() {
   const sim = useRef(null)
-  const [world] = useState(() => pickWorld())
+  const [progress, setProgress] = useState(() => loadProgress()) // saved per-world bests and stars (progress.js)
+  const [world, setWorld] = useState(() => pickWorld(window.location.search, progress))
+  const unlockAll = useMemo(() => unlockAllRequested(), [])
+  const [screen, setScreen] = useState('start') // 'start' | 'worlds' (the world-select screen)
   if (!sim.current) { sim.current = createSim(1, world.runner); sim.current.phase = 'ready'; sim.current.anim = 'idle' }
   const [phase, setPhase] = useState('ready')
   const [paused, setPaused] = useState(false)
   const [score, setScore] = useState(0)
-  const [progress, setProgress] = useState(() => loadProgress()) // saved per-world bests and stars (progress.js)
   const [orbs, setOrbs] = useState(0)
   const [outcome, setOutcome] = useState(null) // {completed, stars, distance, orbs, seen} of the run that just ended
   const [auto, setAuto] = useState(false) // Auto play: watch-only, the bot drives
   const autoTimer = useRef(0)
+  const screenRef = useRef('start')
+  useEffect(() => { screenRef.current = screen }, [screen])
   const bot = useRef(null)
   const [loaded, setLoaded] = useState(false)
   const [quality] = useState(detectQuality)
@@ -243,6 +248,22 @@ export default function RunnerGame() {
     s.auto = false; s.driver = null
     setAuto(false); setScore(0); setOrbs(0)
   }, [])
+  // Switch worlds in-page (no reload): the scene re-themes, the sim gets the new world's data, the URL keeps ?world= in sync.
+  const selectWorld = useCallback((id) => {
+    const w = allWorlds.find((x) => x.id === id)
+    if (!w) return false
+    const card = describeWorlds(progress, allWorlds, unlockAll).find((c) => c.id === id)
+    if (!card || card.locked) return false // locked worlds cannot be selected (?unlock=all lifts this for QA)
+    clearTimeout(autoTimer.current)
+    const s = sim.current
+    s.world = w.runner
+    resetToReady(s)
+    s.auto = false; s.driver = null
+    setAuto(false); setScore(0); setOrbs(0); setOutcome(null); setShowOver(false)
+    setWorld(w); setScreen('start')
+    try { const u = new URL(window.location.href); u.searchParams.set('world', id); window.history.replaceState(null, '', u) } catch { /* no history API */ }
+    return true
+  }, [progress, unlockAll])
   const togglePause = useCallback(() => {
     const s = sim.current
     if (s.phase === 'running') s.paused = !s.paused
@@ -276,6 +297,7 @@ export default function RunnerGame() {
         onKey: (e) => {
           const s = sim.current
           if (s.auto && e.code === 'Escape') { if (!e.repeat) exitAuto(); return true } // Esc leaves Auto play
+          if (s.phase === 'ready' && screenRef.current === 'worlds') { if (e.code === 'Escape' && !e.repeat) setScreen('start'); return e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space' } // the world list is a menu: Esc closes it; Enter/Space never start a run behind it
           if (e.code === 'Escape' || e.code === 'KeyP') { if (!e.repeat) togglePause(); return true }
           if (s.auto) return false // watch-only: every other key is ignored by command()
           if (s.phase !== 'running' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) { if (!e.repeat) start(); return true }
@@ -293,8 +315,8 @@ export default function RunnerGame() {
   }, [start, togglePause, exitAuto, world.id, world.name])
 
   useEffect(() => {
-    if (debug) window.__frostRunner = { sim: sim.current, command: (c) => command(sim.current, c), start, startAuto, exitAuto, reset: () => resetToReady(sim.current), debug }
-  }, [debug, start, startAuto, exitAuto])
+    if (debug) window.__frostRunner = { sim: sim.current, command: (c) => command(sim.current, c), start, startAuto, exitAuto, selectWorld, reset: () => resetToReady(sim.current), debug }
+  }, [debug, start, startAuto, exitAuto, selectWorld])
 
   return (
     <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded}>
@@ -324,19 +346,44 @@ export default function RunnerGame() {
 
       {!loaded && <div className="runner-screen"><p className="runner-loading">Loading Frost…</p></div>}
 
-      {loaded && phase === 'ready' && (
+      {loaded && phase === 'ready' && screen === 'start' && (
         <div className="runner-screen" data-screen="start">
           <h1>Frost</h1>
           <p className="runner-tag">Run the snowy trail with Aisha</p>
           <p className="runner-level" data-testid="level-info">{world.name} · {finish} m{saved.stars > 0 && <> · <Stars n={saved.stars} /></>}{saved.best > 0 && saved.stars === 0 && <> · best {saved.best} m</>}</p>
           <button className="runner-btn" onClick={start} autoFocus>Start run</button>
           <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
+          <button className="runner-btn runner-btn-alt" onClick={() => setScreen('worlds')}>Worlds</button>
           <p className="runner-hint">Auto play: watch Aisha run by herself</p>
           <ul className="runner-help">
             <li><b>← →</b> / A D · swipe: change lane</li>
             <li><b>↑</b> / W / Space · swipe up: jump</li>
             <li><b>↓</b> / S · swipe down: duck</li>
           </ul>
+        </div>
+      )}
+
+      {loaded && phase === 'ready' && screen === 'worlds' && (
+        <div className="runner-screen runner-select" data-screen="worlds">
+          <h2>Choose a world</h2>
+          <p className="runner-hint">{describeWorlds(progress, allWorlds, unlockAll).reduce((n, c) => n + c.stars, 0)} / {allWorlds.length * 3} ★ · finish a world to unlock the next</p>
+          <ul className="runner-worlds">
+            {describeWorlds(progress, allWorlds, unlockAll).map((c) => (
+              <li key={c.id}>
+                <button
+                  className={`runner-card${c.id === world.id ? ' current' : ''}${c.locked ? ' locked' : ''}`}
+                  data-world={c.id} disabled={c.locked} aria-disabled={c.locked} onClick={() => selectWorld(c.id)}
+                  style={{ '--art': `url(${allWorlds.find((x) => x.id === c.id).background})` }}
+                >
+                  <span className="runner-card-name">{c.id} · {c.name}</span>
+                  <span className="runner-card-meta">
+                    {c.locked ? <>🔒 Finish {c.unlockedBy}</> : <>{c.finish} m · <Stars n={c.stars} />{c.best > 0 && <> · best {c.best} m</>}</>}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button className="runner-btn runner-btn-alt" onClick={() => setScreen('start')} autoFocus>Back</button>
         </div>
       )}
 
@@ -368,7 +415,7 @@ export default function RunnerGame() {
           <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} / {outcome.seen} orbs</p>
           <p className="runner-tag">{outcome.distance} m · best {saved.stars}★</p>
           <button className="runner-btn" onClick={start} autoFocus>Play again</button>
-          {nextWorldId(world.id, worldIds) && <a className="runner-btn runner-btn-alt runner-next" href={`?game=frost&world=${nextWorldId(world.id, worldIds)}${debug ? '&debug' : ''}`}>Next world</a>}
+          {nextWorldId(world.id, worldIds) && <button className="runner-btn runner-btn-alt runner-next" onClick={() => selectWorld(nextWorldId(world.id, worldIds))}>Next world</button>}
           <p className="runner-hint">Enter · Space · R</p>
         </div>
       )}
