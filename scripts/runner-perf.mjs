@@ -58,6 +58,7 @@ async function measure(name, viewport, mobile) {
     out.push(await read('without snowfall', (o) => o.isPoints))
     out.push(await read('without Aisha', (o) => o.isSkinnedMesh))
     out.push(await read('only Aisha', (o) => (o.isMesh || o.isPoints || o.isInstancedMesh) && !o.isSkinnedMesh))
+    const savedDist = window.__frostRunner.sim.dist // the extra measurements below move Aisha around; restore her afterwards
     // the same frame with the finish gate in view (it is hidden for most of a level): must stay within the budget too
     window.__frostRunner.sim.dist = window.__frostRunner.sim.world.finishDistance - 40
     await frames(8)
@@ -72,6 +73,7 @@ async function measure(name, viewport, mobile) {
       await frames(3)
       out.push(await read('everything, wolves in view'))
     }
+    { const q = window.__frostRunner.sim; q.dist = savedDist; q.phase = 'running'; q.gen.lastPos = q.dist + 20; for (const o of q.obstacles) o.active = false }
     d.gl.info.autoReset = true
     const i = d.gl.info
     return { out, geometries: i.memory.geometries, textures: i.memory.textures, simMs: d.simMs, heap: performance.memory?.usedJSHeapSize }
