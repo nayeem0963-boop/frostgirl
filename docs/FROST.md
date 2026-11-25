@@ -1,3 +1,34 @@
+# Frost — data-driven worlds (PR 4.2)
+
+`?game=frost&world=01..07` picks the world the runner renders (default `01`; unknown ids fall back to `01`). The world-select
+screen that sets this arrives in 4.4, levels/finish in 4.3. All per-world data lives in **`src/worlds/runnerThemes.js`**
+(pure data, readable from the simulation and from Node tests) and is attached to each world in `src/worlds/config.js` as
+`world.runner`; World 01's existing fields (the original game's) are untouched.
+
+| Field | What it drives |
+| --- | --- |
+| `sky`, `fog`, `light` | the sky shader colours, scene fog and background, hemisphere / ambient / sun lights |
+| `snow` | flake colour and counts (desktop / phone) |
+| `ground`, `trail` | the powder beside the trail and the packed trail with its lane dividers and rails (canvas textures) |
+| `backdrop` | `null` = the 3D mountain massif (World 01); `{crop}` = the world's painting from `public/assets/backgrounds/worlds/` as the horizon |
+| `patternWeights` | multipliers (default 1; 0 removes a pattern) for `wall1 wall2 ridge arch slalom wallRidge archWall zigzag` in `sim/patterns.js` |
+| `finishDistance`, `difficultySeconds` | metres to finish (used by 4.3) and the run time until the generator is at full difficulty |
+
+The paintings are portrait scenes with a road down the middle, so `scene/Backdrop.jsx` uses only the top 42% (sky, aurora,
+castles, trees), mirrored across the width, faded into the sky above and the fog below. Worlds 02-07 so far differ by palette,
+backdrop, pattern weights and finish distance (1500, 1600 ... 2000 m); their signature hazards come in Phase 5.
+
+**World 01 is unchanged**, and this is checked three ways: (1) `tests/worlds.test.js` pins every theme constant to the runner's
+original hard-coded value; (2) the first 14 obstacle rows of three seeds are pinned to what the generator produced before
+worlds existed; (3) a screenshot of the ready scene (snowfall and UI hidden) before vs after differs only on Aisha, whose idle
+animation is time-based (0.46% of pixels on desktop, all on her except 3).
+
+Tests: `tests/worlds.test.js` (theme pins, registry, validity of all seven themes, pattern weights, per-world difficulty ramp,
+**the Auto play bot survives every world**, 2 seeds x 150 s each) and `ONLY=worlds npm run test:e2e` (each world loads, runs under
+Auto play, has its own fog colour; unknown id falls back).
+
+---
+
 # Frost — mobile budget (PR 4.1)
 
 Budget for the runner, per frame, on the phone profile and desktop: **<= 350k triangles and <= 30 draw calls**, aiming for
