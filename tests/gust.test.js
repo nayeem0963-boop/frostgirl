@@ -91,13 +91,13 @@ test('the generator never places a row (or leaves one) in a gust window, in Worl
   }
 })
 
-test('gusts only blow in World 06', () => {
-  assert.deepEqual(worldIds.filter((id) => themeFor(id).gust), ['06'])
+test('gusts only blow in Worlds 06 and 07', () => {
+  assert.deepEqual(worldIds.filter((id) => themeFor(id).gust), ['06', '07'])
   for (const id of worldIds) {
     const s = started(7, id); clear(s)
     s.gen.lastPos = 1e9
     for (let i = 0; i < 60 * 40; i++) { s.phase = 'running'; update(s, 1 / 60); for (const o of s.obstacles) o.active = false }
-    if (id === '06') assert.ok(s.count.gust >= 1, `world 06 blows (${s.dist.toFixed(0)} m run)`)
+    if (id === '06' || id === '07') assert.ok(s.count.gust >= 1, `world 06 blows (${s.dist.toFixed(0)} m run)`)
     else assert.equal(s.count.gust ?? 0, 0, `world ${id} (${s.dist.toFixed(0)} m run)`)
   }
   assert.equal(themeFor('06').hazards.gust, true)

@@ -278,7 +278,7 @@ if (want('worlds')) {
   const names = { '01': 'Frozen Kingdom', '02': 'Whispering Ice Forest', '03': 'Crystal Mountains', '04': 'Frozen Ocean', '05': 'Frosted Dream Desert', '06': 'Sky of Aurora', '07': 'Celestial Ice Palace' }
   const looks = new Map()
   for (const id of Object.keys(names)) {
-    const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, id === '01' ? '' : `&world=${id}`)
+    const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, id === '01' ? '' : `&world=${id}&unlock=all`)
     await page.getByRole('button', { name: 'Auto play' }).click()
     for (let i = 0; i < 4000; i++) { const t = await S(page, () => window.__frostRunner.sim.time); if (t >= 4) break; await realSleep(40) }
     const st = await S(page, () => { const s = window.__frostRunner.sim; return { phase: s.phase, finish: s.world.finishDistance, title: document.title, pose: window.__frostRunner.debug.pose } })
@@ -323,7 +323,7 @@ if (want('level')) {
   check('level-complete panel shows the orb count', /330\s*\/\s*380 orbs/.test(await page.locator('[data-screen="complete"]').innerText()))
   p = await stored(page)
   check('completion is saved: stars, completed, best', p.worlds['01'].stars === 3 && p.worlds['01'].completed === true && p.worlds['01'].best >= 1500, JSON.stringify(p.worlds['01']))
-  check('"Next world" leads to World 02', (await page.getByRole('link', { name: 'Next world' }).getAttribute('href')).includes('world=02'))
+  check('a "Next world" button is offered (it switches in-page, checked below)', await page.getByRole('button', { name: 'Next world' }).isVisible())
   const celebrating = await S(page, () => window.__frostRunner.debug.pose)
   check('Aisha celebrates after the line', celebrating === 'celebrate' || celebrating === 'run', celebrating)
   await page.screenshot({ path: `${out}/13-level-complete.png` })
@@ -380,9 +380,9 @@ if (want('level')) {
     await ctx.close()
   }
   const { ctx, page } = await open({ width: 800, height: 450 })
-  await page.goto(`${base}/?game=frost&debug&world=02`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.goto(`${base}/?game=frost&debug&world=02&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
   check('World 02 start screen shows its name and 1500 m', /Whispering Ice Forest\s*·\s*1500 m/.test(await page.getByTestId('level-info').innerText()))
-  await page.goto(`${base}/?game=frost&debug&world=03`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.goto(`${base}/?game=frost&debug&world=03&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
   check('World 03 start screen shows its name and 1600 m', /Crystal Mountains\s*·\s*1600 m/.test(await page.getByTestId('level-info').innerText()))
   await ctx.close()
 }
@@ -768,6 +768,23 @@ if (want('gust')) {
   const none = await S(w1.page, () => !window.__frostRunner.sim.world.gust)
   check('World 01 has no gusts', none)
   await w1.ctx.close()
+}
+
+if (want('palace')) {
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=07&unlock=all')
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  const kinds = new Set(); let last = { t: 0, ph: 'running', n: 0 }
+  for (let i = 0; i < 16000; i++) {
+    last = await S(page, () => { const s = window.__frostRunner.sim; return { t: s.time, ph: s.phase, n: s.nextGust, k: s.obstacles.filter((o) => o.active).map((o) => o.kind) } })
+    last.k.forEach((x) => kinds.add(x))
+    if (last.t >= 60 || last.ph !== 'running') break
+    await realSleep(60)
+  }
+  await page.screenshot({ path: `${out}/28-palace-auto.png` })
+  check('Auto play survives 60 s of World 07', last.ph === 'running' && last.t >= 60, `t ${last.t.toFixed(1)} s, ${last.n} gusts crossed`)
+  check('World 07 mixes the hazards (wall, wolf, shard, hole all seen)', ['wall', 'wolf', 'shard', 'hole'].every((k) => kinds.has(k)), [...kinds].join(','))
+  check('World 07 loads the wolf model and draws every hazard type without page errors', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
 }
 
 // Retry/Restart button stays on screen at 1534x630 and on phones

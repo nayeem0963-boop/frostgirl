@@ -1,3 +1,28 @@
+# Frost — Phase 5.6: World 07, the Celestial Ice Palace finale
+
+World 07 is the last world and uses everything the earlier ones introduced. It adds no new mechanic; it is pure data in
+`src/worlds/runnerThemes.js`:
+
+- **Hazards on**: wolf, shard, hole, gust and mist (`hazards: { wolf, shard, hole, gust, mist }`).
+- **Each rarer than at home**: wolf/shard/hole pattern weights 0.7 / 0.5 / 0.4 (single / with a wall / pair) against 1.6-2 in
+  their own worlds; gusts every ~260 m (World 06: 200 m); two short mist banks of 110 m at 900-1010 and 1600-1710 m
+  (World 05: 130 m, five banks). The last 290 m before the 2000 m finish are clear of mist, and the last gust is well before it.
+- **Fairness** is unchanged: every hazard goes through the same generator rules (reaction time, shift time, gust windows).
+- Worlds 01-06 are untouched; their hazard flags are pinned by a test.
+
+## Tests (run here)
+- `npm test`: 183/183 (new `tests/palace.test.js`; the "only in its world" tests of Worlds 02-06 now also allow 07).
+  The bot finishes World 07 on seeds 81-84, meeting walls, wolves, shards, holes, at least 4 gusts and thick mist each run.
+- `ONLY=palace node scripts/runner-e2e.mjs <url>`: 3/3 (Auto play 60 s through World 07, all four obstacle kinds seen, no
+  page errors). Software-rendered headless Chrome.
+- `ONLY=worlds` 9/9, `ONLY=select` 28/28, `ONLY=level` 26/26. Three old e2e checks were stale and are fixed here (not game bugs):
+  the `worlds` and two `level` start-screen checks were measuring World 01 because they lacked `unlock=all`, and the
+  "Next world" check expected a link although it is an in-page button since 5.2.
+- `node scripts/runner-perf.mjs <url> --budget --world=07`: every hazard type in view (wolves, shards, holes, gust line) is
+  within budget: at most 27 draw calls / 249k triangles on desktop, 27 / 206k on phone portrait. Each hazard is measured
+  on its own, not all together in one frame, and real-device frame rates are not measured.
+- Not tested here: how hard the finale feels to a human. The bot finishes it, but its difficulty needs a real play-through.
+
 # Frost — Phase 5.5: World 06's aurora gusts
 
 World 06 "Sky of Aurora" gets its signature hazard: **wind gusts**. Unlike the wolf, shard and hole, a gust never kills.

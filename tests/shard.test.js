@@ -84,7 +84,7 @@ test('shards appear only in the worlds that turn them on', () => {
       const s = createSim(seed, themeFor(id)); startRun(s, seed)
       for (let i = 0; i < 60 * 130; i++) { s.phase = 'running'; update(s, 1 / 60); for (const o of s.obstacles) if (o.active && o.kind === 'shard') seen++ }
     }
-    if (id === '03') assert.ok(seen > 50, `World 03 has shards (${seen})`)
+    if (id === '03' || id === '07') assert.ok(seen > 50, `World 03 has shards (${seen})`)
     else assert.equal(seen, 0, `world ${id} must have none`)
   }
   assert.equal(themeFor('03').hazards.shard, true); assert.equal(themeFor('02').hazards.shard, undefined)

@@ -55,14 +55,14 @@ test('the last stretch before the finish line is always clear of mist', () => {
   }
 })
 
-test('only World 05 has mist (data and in play)', () => {
-  assert.deepEqual(worldIds.filter((id) => themeFor(id).mist), ['05'])
+test('Worlds 05 and 07 have mist (data and in play)', () => {
+  assert.deepEqual(worldIds.filter((id) => themeFor(id).mist), ['05', '07'])
   for (const id of worldIds) {
     const s = createSim(3, themeFor(id)); startRun(s, 3, { auto: true })
     const bot = createBot(); s.driver = (q) => botStep(q, bot)
     let peak = 0, thickFrames = 0, frames = 0, minVision = 1e9
-    for (let t = 0; t < 120 && s.phase === 'running'; t += 1 / 60) { update(s, 1 / 60); peak = Math.max(peak, s.mist); if (s.mist > 0.99) thickFrames++; frames++; minVision = Math.min(minVision, s.vision) }
-    if (id === '05') { assert.ok(peak > 0.99, `peak ${peak}`); assert.ok(thickFrames / frames > 0.05, 'a real share of the run is in thick mist'); assert.ok(minVision < 45 && minVision > 30, `vision ${minVision}`) }
+    for (let t = 0; t < (id === '07' ? 200 : 120) && s.phase === 'running'; t += 1 / 60) { update(s, 1 / 60); peak = Math.max(peak, s.mist); if (s.mist > 0.99) thickFrames++; frames++; minVision = Math.min(minVision, s.vision) }
+    if (id === '05' || id === '07') { assert.ok(peak > 0.99, `peak ${peak}`); assert.ok(thickFrames / frames > (id === '07' ? 0.02 : 0.05), 'a real share of the run is in thick mist'); assert.ok(minVision < 45 && minVision > 30, `vision ${minVision}`) }
     else { assert.equal(peak, 0, `world ${id}`); assert.ok(minVision > 1e8) }
   }
 })
