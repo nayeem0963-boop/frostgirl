@@ -1,3 +1,37 @@
+# Frost — Phase 6.6 (part 3): Aisha's outfits
+
+The last part of plan item 6.6. Cosmetic only, as the standing rule says: every outfit has the same body, collision box and physics;
+there is no shop and nothing to buy. They are **colour variants** of one model, because there are no additional models or textures to
+swap in: what changes is the colour of the blue parts of her texture (the sash, leggings and glints). Her white top, skin and hair keep
+their colours. They apply in the runner (not in the original game, which does not read these settings).
+
+| Outfit | Look | Unlocked by |
+| --- | --- | --- |
+| Frost | her original blue (always open) | nothing |
+| Ember | red-orange | 6 stars (of 21) |
+| Aurora | green | 12 stars |
+| Twilight | violet | 1 challenge badge (of 7) |
+| Gold | olive-gold | 4 challenge badges |
+
+- **Choosing:** Settings > Outfit cycles through the open outfits and names the next locked one with what it needs
+  ("Outfit: Frost · next: 6★"). Saved with the other settings. A saved outfit that is still locked (for example after a reset) is drawn as
+  Frost. `?unlock=all` opens all five.
+- **How:** `src/runner/outfits.js` (data and unlock rules) and `scene/outfitMaterial.js` (a small fragment-shader snippet that turns only
+  blue hues). **The default outfit patches nothing**, so Frost renders exactly as before; the first non-default pick patches each material
+  once and later changes only move a uniform. No new files to download.
+- **Checked by pixel counts:** in headless Chromium, Frost shows 730 blue pixels on her and Ember 7 blue and 776 red-orange. I also looked at
+  all five side by side; they read as clearly different outfits.
+- Settings sheet: it now has nine buttons, so on short wide screens (phone landscape, small desktop windows) it lays out in three columns.
+
+## Tests (run here)
+- `npm test`: 269/269 (new `tests/outfits.test.js`, 7 tests: the list and its distinct colours, unlocking exactly at the requirement from stars
+  and badges, `?unlock=all`, a locked choice falls back, cycling through open outfits only, the "next locked" text, saving and junk values).
+- `ONLY=outfit` 14/14 in headless Chrome (a fresh save offers only Frost and patches no material; 6 stars open Ember; it is saved and drawn
+  with its hue and the colours really move; a locked saved outfit is drawn as Frost; `?unlock=all` cycles all five).
+- Regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,challenge,outfit` 236/236 (whole levels in the browser; the Retry/Restart button inside the viewport at 1534x630 and on phones; the nine-button Settings sheet fits on phones in both orientations).
+- **Not verified:** how the outfits look on a real screen and in motion (I looked at stills), and whether the star and badge requirements
+  suit how fast people progress: the badge requirements depend on the challenge goals, which are themselves unvalidated.
+
 # Frost — Phase 6.6 (part 2): world challenges
 
 Part 2 of plan item 6.6 (part 1 was Endless mode). Cosmetic outfits (part 3) are not started. I read "per-world star goals" as **one

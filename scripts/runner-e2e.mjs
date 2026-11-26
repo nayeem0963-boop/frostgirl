@@ -1186,6 +1186,74 @@ if (want('challenge')) {
   }
 }
 
+if (want('outfit')) {
+  const sharp = require('sharp')
+  const seedProgress = JSON.stringify({ version: 1, worlds: { '01': { best: 1500, bestOrbs: 300, stars: 3, completed: true }, '02': { best: 1500, bestOrbs: 300, stars: 3, completed: true } } })
+  const openWith = async (init, query = '') => {
+    const ctx = await browser.newContext({ viewport: { width: 700, height: 600 }, deviceScaleFactor: 1 })
+    await ctx.addInitScript((i) => { try { if (!localStorage.getItem('__seeded')) { localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(i)) localStorage.setItem(k, v) } } catch { /* ignore */ } }, init)
+    const page = await ctx.newPage(); active = page
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto(`${base}/?game=frost&debug&tier=high${query}`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(1200)
+    return { ctx, page, errors }
+  }
+  const patched = (page) => S(page, () => { const sc = window.__frostRunner.debug.scene; const hues = []; sc.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m?.userData?.outfit) hues.push(m.userData.outfit.value) }); return hues })
+  // pixels of Aisha (her own screen region) that are blue / reddish-orange, counted from a screenshot
+  const colourCounts = async (page) => {
+    await page.keyboard.press('Enter'); await sleep(2200); await clear(page); await sleep(700)
+    const png = await page.screenshot({ clip: { x: 320, y: 332, width: 65, height: 98 } })
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true })
+    let blue = 0, red = 0
+    for (let i = 0; i < data.length; i += info.channels) {
+      const [r, g, b] = [data[i] / 255, data[i + 1] / 255, data[i + 2] / 255]
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn
+      if (mx < 0.15 || d / (mx || 1) < 0.25) continue
+      let h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6
+      if (h > 0.5 && h < 0.72) blue++
+      else if (h < 0.1 || h > 0.95) red++
+    }
+    return { blue, red }
+  }
+  // 1. a fresh save: only the original outfit, which draws with no patched materials at all
+  { const { ctx, page, errors } = await openWith({})
+    await page.getByRole('button', { name: 'Settings' }).click(); await sleep(250)
+    check('a fresh save offers only Frost and names the next outfit and what it needs', /^Outfit: Frost · next: 6★$/.test(await page.getByTestId('outfit').innerText()), await page.getByTestId('outfit').innerText())
+    await page.getByTestId('outfit').click(); await sleep(150)
+    check('with one open outfit the button stays on Frost', /^Outfit: Frost/.test(await page.getByTestId('outfit').innerText()))
+    await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
+    check('the original look patches no material (renders exactly as before)', (await patched(page)).length === 0)
+    const frost = await colourCounts(page)
+    check('Frost shows her blue sash and leggings', frost.blue >= 25 && frost.blue > frost.red, JSON.stringify(frost))
+    check('no page errors (outfit, fresh)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0)
+    await ctx.close() }
+  // 2. six stars unlock Ember: pick it, it is saved, drawn, and the colours really move
+  { const { ctx, page, errors } = await openWith({ 'frost-runner-progress-v1': seedProgress })
+    await page.getByRole('button', { name: 'Settings' }).click(); await sleep(250)
+    check('6 stars open Ember (the next one is named: 12 stars)', /^Outfit: Frost · next: 12★$/.test(await page.getByTestId('outfit').innerText()), await page.getByTestId('outfit').innerText())
+    await page.getByTestId('outfit').click(); await sleep(250)
+    check('the button now shows Ember and is saved', /^Outfit: Ember/.test(await page.getByTestId('outfit').innerText()) && JSON.parse(await S(page, () => localStorage.getItem('frost-runner-settings-v1'))).outfit === 'ember')
+    await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
+    check('Ember patches her materials with its hue', (await patched(page)).length > 0 && (await patched(page)).every((h) => Math.abs(h - 0.4) < 1e-9), JSON.stringify(await patched(page)))
+    const ember = await colourCounts(page)
+    await page.screenshot({ path: `${out}/40-outfit-ember.png`, clip: { x: 200, y: 330, width: 300, height: 260 } })
+    check('Ember turns the blue parts red-orange', ember.blue <= 8 && ember.red >= 20, JSON.stringify(ember))
+    check('the run is unaffected by the outfit (running, moving)', (await sim(page)).phase === 'running' && (await sim(page)).dist > 0)
+    check('no page errors (outfit, ember)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+    await ctx.close() }
+  // 3. a locked outfit saved earlier falls back to the original; ?unlock=all opens everything
+  { const { ctx, page } = await openWith({ 'frost-runner-settings-v1': JSON.stringify({ outfit: 'gold' }) })
+    await page.getByRole('button', { name: 'Settings' }).click(); await sleep(250)
+    check('a saved outfit that is still locked is drawn as Frost', /^Outfit: Frost/.test(await page.getByTestId('outfit').innerText()) && (await patched(page)).length === 0)
+    await ctx.close() }
+  { const { ctx, page } = await openWith({}, '&unlock=all')
+    await page.getByRole('button', { name: 'Settings' }).click(); await sleep(250)
+    const seen = []
+    for (let i = 0; i < 6; i++) { seen.push((await page.getByTestId('outfit').innerText()).replace(/^Outfit: /, '').split(' ·')[0]); await page.getByTestId('outfit').click(); await sleep(120) }
+    check('?unlock=all cycles through all five outfits and wraps', JSON.stringify(seen) === JSON.stringify(['Frost', 'Ember', 'Aurora', 'Twilight', 'Gold', 'Frost']), JSON.stringify(seen))
+    check('and names nothing as locked', !/next:/.test(await page.getByTestId('outfit').innerText()))
+    await ctx.close() }
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

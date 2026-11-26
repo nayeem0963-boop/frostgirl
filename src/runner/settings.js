@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   quality: 'auto', // 'auto' picks from the screen and pointer | 'low' | 'high'
   leftHanded: false, // the pause button moves to the left edge, away from a right thumb that is swiping
   highContrast: false, // warm amber glow on obstacles so they stand out from snow and ice for every kind of colour vision
+  outfit: 'frost', // which of Aisha's outfits to draw (outfits.js); one that is still locked falls back to the original
   difficulty: 'normal', // 'easy' | 'normal' | 'hard': how often and how tightly obstacles come (sim/difficulty.js); never the physics
   hintSeen: false, // the first-run controls hint has been dismissed
 }
@@ -24,6 +25,7 @@ export function sanitize(raw) {
   const out = { ...DEFAULT_SETTINGS }
   if (!raw || typeof raw !== 'object') return out
   for (const k of ['haptics', 'sound', 'leftHanded', 'highContrast', 'hintSeen']) if (typeof raw[k] === 'boolean') out[k] = raw[k]
+  if (typeof raw.outfit === 'string' && /^[a-z]{2,12}$/.test(raw.outfit)) out.outfit = raw.outfit
   for (const k of ['motion', 'quality', 'difficulty']) if (CHOICES[k].includes(raw[k])) out[k] = raw[k]
   return out
 }

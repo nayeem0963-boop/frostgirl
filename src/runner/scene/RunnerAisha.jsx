@@ -10,6 +10,7 @@ import { AnimationMixer, LoopOnce, LoopRepeat } from 'three'
 import { ASSETS } from '../../expedition/assets.js'
 import { subclip } from '../../expedition/actors/Aisha.jsx'
 import { runRate } from '../sim/sim.js'
+import { applyOutfit } from './outfitMaterial.js'
 
 // clip = clip name inside aisha.glb; range = sub-range in seconds.
 export const RUNNER_STATES = {
@@ -25,7 +26,7 @@ export const RUNNER_STATES = {
   celebrate: { clip: 'celebrate', loop: true, fade: 0.3 },
 }
 
-export function RunnerAisha({ sim, debug }) {
+export function RunnerAisha({ sim, debug, outfit }) {
   const gltf = useGLTF(ASSETS.aisha)
   const root = useRef()
   const tilt = useRef()
@@ -57,6 +58,7 @@ export function RunnerAisha({ sim, debug }) {
     return { mixer, actions, scene, durations }
   }, [gltf])
   useEffect(() => () => mixer.stopAllAction(), [mixer])
+  useEffect(() => { if (outfit) applyOutfit(scene, outfit) }, [scene, outfit]) // her outfit colours (outfits.js): cosmetic only
 
   useFrame((_, raw) => {
     const s = sim.current
