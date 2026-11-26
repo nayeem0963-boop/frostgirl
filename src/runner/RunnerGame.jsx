@@ -25,6 +25,7 @@ import { createSim, startRun, resetToReady, update, command, aheadOf } from './s
 import { attachInput } from './sim/input.js'
 import { buzz, hapticsSupported } from './feel.js'
 import { createAudio } from './audio/engine.js'
+import { CHALLENGES, evaluateChallenge, progressLabel } from './challenges.js'
 import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, showHint } from './settings.js'
 import { TIERS, TIER_DATA, FrameMeter, activeTier, loadTier, nextTierDown, saveTier, snowCount, startTier } from './quality.js'
 import { createBot, botStep } from './sim/bot.js'
@@ -371,8 +372,10 @@ export default function RunnerGame() {
       const done = p === 'complete'
       hitAt.current = performance.now()
       const prevEndless = progressRef.current.worlds[world.id]?.bestEndless ?? 0
-      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen, hit: s.hit?.kind, endless: s.endless, newBest: s.endless && Math.floor(s.dist) > prevEndless })
-      setProgress((prev) => { const next = s.endless ? recordEndless(prev, world.id, { distance: s.dist }) : recordRun(prev, world.id, { distance: s.dist, orbs: s.orbCount, completed: done, stars: s.stars }); saveProgress(next); return next })
+      const ch = s.endless ? null : evaluateChallenge(world.id, { completed: done, endless: false, orbs: s.orbCount, seen: s.orbsSeen, tally: s.tally })
+      const chNew = !!ch?.done && !progressRef.current.worlds[world.id]?.challenge
+      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen, hit: s.hit?.kind, endless: s.endless, newBest: s.endless && Math.floor(s.dist) > prevEndless, challenge: ch, challengeNew: chNew })
+      setProgress((prev) => { const next = s.endless ? recordEndless(prev, world.id, { distance: s.dist }) : recordRun(prev, world.id, { distance: s.dist, orbs: s.orbCount, completed: done, stars: s.stars, challenge: ch?.done === true }); saveProgress(next); return next })
       overTimer.current = setTimeout(() => setShowOver(true), done ? DONE_DELAY : OVER_DELAY) // let the impact / the celebration play out first
     } else {
       setShowOver(false)
@@ -480,6 +483,7 @@ export default function RunnerGame() {
                   <span className="runner-card-meta">
                     {c.locked ? <>🔒 Finish {c.unlockedBy}</> : <>{c.finish} m · <Stars n={c.stars} />{c.best > 0 && <> · best {c.best} m</>}</>}
                   </span>
+                  {!c.locked && CHALLENGES[c.id] && <span className="runner-card-ch" data-done={c.challenge}>{c.challenge ? '◆' : '◇'} {CHALLENGES[c.id].text}</span>}
                 </button>
               </li>
             ))}
@@ -536,6 +540,7 @@ export default function RunnerGame() {
           <p className="runner-stars" aria-label={`${outcome.stars} of 3 stars`}><Stars n={outcome.stars} big /></p>
           <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} / {outcome.seen} orbs</p>
           <p className="runner-tag">{outcome.distance} m · best {saved.stars}★</p>
+          {outcome.challenge && <p className="runner-tag runner-challenge" data-testid="challenge-result" data-done={outcome.challenge.done}>{outcome.challenge.done ? '◆' : '◇'} {outcome.challenge.text} · {outcome.challenge.done ? (outcome.challengeNew ? 'done!' : 'done') : progressLabel(outcome.challenge)}</p>}
           <button className="runner-btn" onClick={startLevel} autoFocus>Play again</button>
           <button className="runner-btn runner-btn-alt runner-menu" onClick={toMenu}>Menu</button>
           {nextWorldId(world.id, worldIds) && <button className="runner-btn runner-btn-alt runner-next" onClick={() => selectWorld(nextWorldId(world.id, worldIds))}>Next world</button>}

@@ -57,6 +57,7 @@ export function createSim(seed = 1, world = themeFor('01')) {
     hitT: 0, // seconds since the hit
     knock: 0, // 0..1 eased knock-back after a hit (visual)
     count: {}, // lifetime event counters: jump, duck, lane, land, hit, start
+    tally: { passed: {}, close: {}, closeInMist: 0, closeAfterGust: 0, holesJumped: 0, lastGust: -1e9 }, // this run's counts, for the world challenges
     events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start' | 'orb' | 'gust' | 'nearMiss' | 'complete'
     obstacles: Array.from({ length: POOL }, () => ({ active: false, kind: 'wall', x: 0, dist: 0, id: 0 })),
     orbs: Array.from({ length: ORBS.pool }, () => ({ active: false, taken: false, takenT: 0, x: 0, y: 0, dist: 0, id: 0 })),
@@ -92,6 +93,7 @@ export function startRun(sim, seed = sim.seed + 1, { auto = false, difficulty = 
   for (const o of sim.obstacles) o.active = false
   for (const o of sim.orbs) { o.active = false; o.taken = false }
   sim.orbCount = 0; sim.orbsSeen = 0; sim.stars = 0; sim.doneT = 0; sim.mist = 0; sim.vision = 1e9; sim.nextGust = 0
+  sim.tally = { passed: {}, close: {}, closeInMist: 0, closeAfterGust: 0, holesJumped: 0, lastGust: -1e9 }
   sim.events.length = 0
   emit(sim, 'start')
   fillObstacles(sim)
@@ -351,6 +353,7 @@ function stepOnce(sim, dt) {
       const to = sim.lane + g.dir
       if (to >= 0 && to <= 2) { sim.laneFrom = sim.x; sim.lane = to; sim.laneT = 0; sim.queued = null }
       emit(sim, 'gust')
+      sim.tally.lastGust = sim.dist
     }
   }
   if (sim.world.mist) { // the mist is a function of the distance run; the fog (and what the bot can see) follows it
@@ -374,7 +377,12 @@ function stepOnce(sim, dt) {
     }
     if (!o.passed && ahead <= 0) { // the obstacle is level with her and did not touch her: how close was it?
       o.passed = true
-      if (clearance(sim, o, ducked) < NEAR_MISS) emit(sim, 'nearMiss')
+      const close = clearance(sim, o, ducked) < NEAR_MISS
+      if (close) emit(sim, 'nearMiss')
+      // per-run tallies for the world challenges (challenges.js): counted at the moment an obstacle is level with her and has not hit her
+      sim.tally.passed[o.kind] = (sim.tally.passed[o.kind] ?? 0) + 1
+      if (close) { sim.tally.close[o.kind] = (sim.tally.close[o.kind] ?? 0) + 1; if (sim.mist > 0.9) sim.tally.closeInMist++; if (sim.dist - sim.tally.lastGust < 30) sim.tally.closeAfterGust++ }
+      if (o.kind === 'hole' && sim.y > 0.25) sim.tally.holesJumped++ // she was in the air over the hole
     }
   }
   if (!sim.endless && sim.dist >= sim.world.finishDistance) {
