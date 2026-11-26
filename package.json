@@ -12,7 +12,8 @@
     "test:budget": "node scripts/runner-perf.mjs http://127.0.0.1:4173 --budget",
     "preview": "vite preview",
     "check": "oxlint && node --test && vite build",
-    "test:net": "vite build --outDir /tmp/frost-net-dist --emptyOutDir && node scripts/net-report.mjs /tmp/frost-net-dist"
+    "test:net": "vite build --outDir /tmp/frost-net-dist --emptyOutDir && node scripts/net-report.mjs /tmp/frost-net-dist",
+    "models:compress": "node scripts/compress-models.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
