@@ -23,12 +23,13 @@ import { Orbs } from './scene/Orbs.jsx'
 import { RunnerAisha } from './scene/RunnerAisha.jsx'
 import { createSim, startRun, resetToReady, update, command, aheadOf } from './sim/sim.js'
 import { attachInput } from './sim/input.js'
-import { buzz, hapticsSupported, loadHaptics, saveHaptics } from './feel.js'
+import { buzz, hapticsSupported } from './feel.js'
+import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, resolveQuality, showHint } from './settings.js'
 import { createBot, botStep } from './sim/bot.js'
 import { cameraFor, cameraTarget } from './sim/camera.js'
 import './runner.css'
 
-const REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+const SYSTEM_REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 const DONE_DELAY = 1400 // ms of celebration before the level-complete panel
 const OVER_DELAY = 600 // ms between the impact and the game-over panel / restart being available
 const FLAT_WORLD = { height: () => 0 } // MountainMassif only needs a ground height
@@ -70,7 +71,7 @@ function Shadow({ sim }) {
 }
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
-function Loop({ sim, onPhase, onScore, onOrbs, onClose, haptics, debug }) {
+function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, debug }) {
   const gl = useThree((st) => st.gl)
   const scene = useThree((st) => st.scene)
   const cam = useThree((st) => st.camera)
@@ -89,6 +90,7 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, haptics, debug }) {
     for (const e of s.events) { // felt events: a short vibration (not in Auto play, or when switched off) and the 'Close!' pop
       buzz(e, { enabled: haptics.current, auto: s.auto })
       if (e === 'nearMiss') onClose()
+      if (e === 'jump' && !s.auto) onJump()
     }
     s.events.length = 0 // keep the queue from growing
     if (debug) { debug.frames = (debug.frames ?? 0) + 1; const ms = performance.now() - t0; debug.simMs = (debug.simMs ?? ms) * 0.95 + ms * 0.05 }
@@ -106,7 +108,7 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, haptics, debug }) {
     look.current.z = tgt.lz
     camera.position.copy(pos.current)
     // a very short, small shake on impact (skipped for reduced motion)
-    if (s.phase === 'gameover' && s.hitT < 0.22 && !REDUCED_MOTION) {
+    if (s.phase === 'gameover' && s.hitT < 0.22 && !reduceMotion.current) {
       const a = 0.07 * (1 - s.hitT / 0.22)
       camera.position.x += Math.sin(s.hitT * 120) * a
       camera.position.y += Math.cos(s.hitT * 97) * a * 0.7
@@ -172,7 +174,7 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, onPhase, onScore, onOrbs, onClose, haptics, debug }) {
+function Scene({ sim, quality, world, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -181,12 +183,12 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, onClose, haptics
       <hemisphereLight args={[t.light.hemiSky, t.light.hemiGround, t.light.hemiIntensity]} />
       <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
-      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} haptics={haptics} debug={debug} />
+      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} debug={debug} />
       {t.mist && <MistFog sim={sim} theme={t} />}
       {t.gust && <Gusts sim={sim} gust={t.gust} />}
       <Sky colors={t.sky} />
       <Ground sim={sim} theme={t} />
-      <Obstacles sim={sim} />
+      <Obstacles sim={sim} highContrast={highContrast} />
       <FinishGate sim={sim} />
       <Shadow sim={sim} />
       <HitBurst sim={sim} />
@@ -231,9 +233,13 @@ export default function RunnerGame() {
   const [score, setScore] = useState(0)
   const [orbs, setOrbs] = useState(0)
   const [close, setClose] = useState(0) // counts 'Close!' pops (a near miss: an obstacle passed within a hand's width)
-  const [haptics, setHaptics] = useState(loadHaptics) // vibration on pickups, gusts, near misses and hits (phones that have it)
-  const hapticsRef = useRef(haptics)
-  useEffect(() => { hapticsRef.current = haptics; saveHaptics(haptics) }, [haptics])
+  const [settings, setSettings] = useState(loadSettings) // player settings (settings.js): vibration, motion, quality, left-handed, high contrast, hint
+  const change = useCallback((patch) => setSettings((v) => ({ ...v, ...patch })), [])
+  const hapticsRef = useRef(settings.haptics)
+  const reduceMotion = resolveReducedMotion(settings, SYSTEM_REDUCED_MOTION)
+  const reduceRef = useRef(reduceMotion)
+  useEffect(() => { hapticsRef.current = settings.haptics; reduceRef.current = reduceMotion; saveSettings(settings) }, [settings, reduceMotion])
+  const onJump = useCallback(() => change({ hintSeen: true }), [change])
   const onClose = useCallback(() => setClose((n) => n + 1), [])
   const [outcome, setOutcome] = useState(null) // {completed, stars, distance, orbs, seen} of the run that just ended
   const [auto, setAuto] = useState(false) // Auto play: watch-only, the bot drives
@@ -242,7 +248,8 @@ export default function RunnerGame() {
   useEffect(() => { screenRef.current = screen }, [screen])
   const bot = useRef(null)
   const [loaded, setLoaded] = useState(false)
-  const [quality] = useState(detectQuality)
+  const [detected] = useState(detectQuality)
+  const quality = resolveQuality(settings, detected)
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
   const hitAt = useRef(0)
@@ -327,7 +334,7 @@ export default function RunnerGame() {
         onKey: (e) => {
           const s = sim.current
           if (s.auto && e.code === 'Escape') { if (!e.repeat) exitAuto(); return true } // Esc leaves Auto play
-          if (s.phase === 'ready' && screenRef.current === 'worlds') { if (e.code === 'Escape' && !e.repeat) setScreen('start'); return e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space' } // the world list is a menu: Esc closes it; Enter/Space never start a run behind it
+          if (s.phase === 'ready' && (screenRef.current === 'worlds' || screenRef.current === 'settings')) { if (e.code === 'Escape' && !e.repeat) setScreen('start'); return e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space' } // the world list is a menu: Esc closes it; Enter/Space never start a run behind it
           if (e.code === 'Escape' || e.code === 'KeyP') { if (!e.repeat) togglePause(); return true }
           if (s.auto) return false // watch-only: every other key is ignored by command()
           if (s.phase !== 'running' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) { if (!e.repeat) start(); return true }
@@ -349,13 +356,13 @@ export default function RunnerGame() {
   }, [debug, start, startAuto, exitAuto, selectWorld])
 
   return (
-    <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded}>
+    <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded} data-reduce-motion={reduceMotion} data-left-handed={settings.leftHanded} data-high-contrast={settings.highContrast}>
       <Canvas
         dpr={quality === 'low' ? [1, 1.5] : [1, 2]}
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
       >
-        <Scene sim={sim} quality={quality} world={world} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} haptics={hapticsRef} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
       </Canvas>
 
       {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
@@ -385,8 +392,8 @@ export default function RunnerGame() {
           <button className="runner-btn" onClick={start} autoFocus>Start run</button>
           <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('worlds')}>Worlds</button>
+          <button className="runner-btn runner-btn-alt" onClick={() => setScreen('settings')}>Settings</button>
           <p className="runner-hint">Auto play: watch Aisha run by herself</p>
-          {hapticsSupported() && <button className="runner-btn runner-btn-alt runner-haptics" role="switch" aria-checked={haptics} onClick={() => setHaptics((v) => !v)}>Vibration: {haptics ? 'on' : 'off'}</button>}
           <ul className="runner-help">
             <li><b>← →</b> / A D · swipe: change lane</li>
             <li><b>↑</b> / W / Space · swipe up: jump</li>
@@ -417,6 +424,24 @@ export default function RunnerGame() {
           </ul>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('start')} autoFocus>Back</button>
         </div>
+      )}
+
+      {loaded && phase === 'ready' && screen === 'settings' && (
+        <div className="runner-screen" data-screen="settings">
+          <h2>Settings</h2>
+          <ul className="runner-settings">
+            {hapticsSupported() && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.haptics} onClick={() => change({ haptics: !settings.haptics })}>Vibration: {settings.haptics ? 'on' : 'off'}</button></li>}
+            <li><button className="runner-btn runner-btn-alt" onClick={() => change({ motion: nextChoice('motion', settings.motion) })}>Reduce motion: {settings.motion}</button></li>
+            <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}</button></li>
+            <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.leftHanded} onClick={() => change({ leftHanded: !settings.leftHanded })}>Left-handed layout: {settings.leftHanded ? 'on' : 'off'}</button></li>
+            <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.highContrast} onClick={() => change({ highContrast: !settings.highContrast })}>High-contrast obstacles: {settings.highContrast ? 'on' : 'off'}</button></li>
+          </ul>
+          <button className="runner-btn" onClick={() => setScreen('start')} autoFocus>Back</button>
+        </div>
+      )}
+
+      {showHint(settings, { auto, phase, dist: score }) && !paused && (
+        <p className="runner-tip" role="status" data-testid="first-run-hint">Swipe or use the arrow keys · ← → change lane · ↑ jump · ↓ duck</p>
       )}
 
       {phase === 'running' && paused && (
