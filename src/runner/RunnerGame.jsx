@@ -24,6 +24,7 @@ import { RunnerAisha } from './scene/RunnerAisha.jsx'
 import { createSim, startRun, resetToReady, update, command, aheadOf } from './sim/sim.js'
 import { attachInput } from './sim/input.js'
 import { buzz, hapticsSupported } from './feel.js'
+import { createAudio } from './audio/engine.js'
 import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, showHint } from './settings.js'
 import { TIERS, TIER_DATA, FrameMeter, activeTier, loadTier, nextTierDown, saveTier, snowCount, startTier } from './quality.js'
 import { createBot, botStep } from './sim/bot.js'
@@ -72,7 +73,7 @@ function Shadow({ sim }) {
 }
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
-function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, meter, adaptive, onDowngrade, debug }) {
+function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, meter, adaptive, onDowngrade, audio, debug }) {
   const gl = useThree((st) => st.gl)
   const scene = useThree((st) => st.scene)
   const cam = useThree((st) => st.camera)
@@ -94,10 +95,12 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceM
     }
     for (const e of s.events) { // felt events: a short vibration (not in Auto play, or when switched off) and the 'Close!' pop
       buzz(e, { enabled: haptics.current, auto: s.auto })
+      audio.event(e, s) // sound: the same events, never in Auto play or when switched off
       if (e === 'nearMiss') onClose()
       if (e === 'jump' && !s.auto) onJump()
     }
     s.events.length = 0 // keep the queue from growing
+    audio.frame(s) // footsteps, hazard warnings and the wind bed follow the run
     if (debug) { debug.frames = (debug.frames ?? 0) + 1; const ms = performance.now() - t0; debug.simMs = (debug.simMs ?? ms) * 0.95 + ms * 0.05 }
 
     const rig = cameraFor(size.width / size.height)
@@ -193,7 +196,7 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, debug }) {
+function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, audio, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -202,7 +205,7 @@ function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose
       <hemisphereLight args={[t.light.hemiSky, t.light.hemiGround, t.light.hemiIntensity]} />
       <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
-      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} debug={debug} />
+      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} debug={debug} />
       {t.mist && <MistFog sim={sim} theme={t} />}
       {t.gust && <Gusts sim={sim} gust={t.gust} />}
       <Sky colors={t.sky} />
@@ -261,7 +264,8 @@ export default function RunnerGame() {
   const reduceMotion = resolveReducedMotion(settings, SYSTEM_REDUCED_MOTION)
   const reduceRef = useRef(reduceMotion)
   const difficultyRef = useRef(settings.difficulty)
-  useEffect(() => { hapticsRef.current = settings.haptics; reduceRef.current = reduceMotion; difficultyRef.current = settings.difficulty; saveSettings(settings) }, [settings, reduceMotion])
+  const soundRef = useRef(settings.sound)
+  useEffect(() => { hapticsRef.current = settings.haptics; reduceRef.current = reduceMotion; difficultyRef.current = settings.difficulty; soundRef.current = settings.sound; saveSettings(settings) }, [settings, reduceMotion])
   const onJump = useCallback(() => change({ hintSeen: true }), [change])
   const onClose = useCallback(() => setClose((n) => n + 1), [])
   const [outcome, setOutcome] = useState(null) // {completed, stars, distance, orbs, seen} of the run that just ended
@@ -277,6 +281,8 @@ export default function RunnerGame() {
   const [autoTier, setAutoTier] = useState(() => startTier(detectQuality(), loadTier()))
   const quality = flags.tier ?? activeTier(settings.quality, autoTier)
   const meter = useMemo(() => new FrameMeter(), [])
+  const audio = useMemo(() => createAudio(), []) // synthesized sound (audio/engine.js): created in a user gesture, silent in Auto play
+  useEffect(() => { audio.setEnabled(settings.sound) }, [audio, settings.sound])
   const adaptive = useRef(false)
   const qualityRef = useRef(quality)
   const adaptiveOn = settings.quality === 'auto' && !flags.tier && nextTierDown(quality) !== null && (!flags.debug || flags.adapt) // nothing lower than min to step to; ?debug runs (tests, measurements) keep their tier unless ?adapt is added
@@ -285,7 +291,7 @@ export default function RunnerGame() {
   const glConfig = useMemo(() => ({ antialias: quality === 'high', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }), []) // eslint-disable-line react-hooks/exhaustive-deps -- antialiasing is fixed when the canvas is created
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
-  useEffect(() => { if (debug) debug.meter = meter }, [debug, meter]) // ?debug: tests shorten the meter's window
+  useEffect(() => { if (debug) { debug.meter = meter; debug.audio = audio } }, [debug, meter, audio]) // ?debug: tests shorten the meter's window and read the sound counters
   const hitAt = useRef(0)
   const progressRef = useRef(progress)
   useEffect(() => { progressRef.current = progress }, [progress])
@@ -384,6 +390,7 @@ export default function RunnerGame() {
           const s = sim.current
           if (s.auto && e.code === 'Escape') { if (!e.repeat) exitAuto(); return true } // Esc leaves Auto play
           if (s.phase === 'ready' && (screenRef.current === 'worlds' || screenRef.current === 'settings')) { if (e.code === 'Escape' && !e.repeat) setScreen('start'); return e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space' } // the world list is a menu: Esc closes it; Enter/Space never start a run behind it
+          if (e.code === 'KeyM') { if (!e.repeat) change({ sound: !soundRef.current }); return true } // M mutes / unmutes
           if (e.code === 'Escape' || e.code === 'KeyP') { if (!e.repeat) togglePause(); return true }
           if (s.auto) return false // watch-only: every other key is ignored by command()
           if (s.phase !== 'running' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) { if (!e.repeat) start(); return true }
@@ -392,13 +399,15 @@ export default function RunnerGame() {
         },
       },
     )
-    const hide = () => { if (document.hidden && sim.current.phase === 'running') sim.current.paused = true }
+    const hide = () => { if (document.hidden) { audio.suspend(); if (sim.current.phase === 'running') sim.current.paused = true } else audio.resume() }
+    const unlockAudio = () => audio.unlock() // browsers only start sound inside a tap or key press
+    document.addEventListener('pointerdown', unlockAudio, true); document.addEventListener('keydown', unlockAudio, true)
     document.addEventListener('visibilitychange', hide)
     const prevent = (e) => e.preventDefault()
     el.addEventListener('touchmove', prevent, { passive: false })
     document.title = world.id === '01' ? 'Frost — Run' : `Frost — ${world.name}`
-    return () => { detach(); document.removeEventListener('visibilitychange', hide); el.removeEventListener('touchmove', prevent) }
-  }, [start, togglePause, exitAuto, world.id, world.name])
+    return () => { detach(); document.removeEventListener('visibilitychange', hide); document.removeEventListener('pointerdown', unlockAudio, true); document.removeEventListener('keydown', unlockAudio, true); el.removeEventListener('touchmove', prevent) }
+  }, [start, togglePause, exitAuto, world.id, world.name, audio])
 
   useEffect(() => {
     if (debug) window.__frostRunner = { sim: sim.current, command: (c) => command(sim.current, c), start, startAuto, exitAuto, selectWorld, reset: () => resetToReady(sim.current), debug }
@@ -411,7 +420,7 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={glConfig}
       >
-        <Scene sim={sim} quality={quality} world={world} endless={endless} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} endless={endless} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
       </Canvas>
 
       {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
@@ -484,6 +493,7 @@ export default function RunnerGame() {
           <h2>Settings</h2>
           <ul className="runner-settings">
             {hapticsSupported() && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.haptics} onClick={() => change({ haptics: !settings.haptics })}>Vibration: {settings.haptics ? 'on' : 'off'}</button></li>}
+            {audio.supported && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.sound} data-testid="sound-switch" onClick={() => change({ sound: !settings.sound })}>Sound: {settings.sound ? 'on' : 'off'}</button></li>}
             <li><button className="runner-btn runner-btn-alt" data-testid="difficulty" onClick={() => change({ difficulty: nextChoice('difficulty', settings.difficulty) })}>Difficulty: {settings.difficulty}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ motion: nextChoice('motion', settings.motion) })}>Reduce motion: {settings.motion}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}{settings.quality === 'auto' ? ` (${quality})` : ''}</button></li>
