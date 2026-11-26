@@ -1,5 +1,6 @@
 import { Component, Suspense } from 'react'
 import { AishaPreview } from './AishaPreview'
+import { MeshyAisha } from './MeshyAisha'
 import { ACTIVE_CHARACTER } from './characterConfig'
 import { FrostGirl } from './FrostGirl'
 
@@ -25,11 +26,11 @@ class CharacterErrorBoundary extends Component {
 
 export function Player({ onPreviewError, ...props }) {
   if (ACTIVE_CHARACTER === 'placeholder') return <FrostGirl {...props} />
-  if (ACTIVE_CHARACTER !== 'aisha') throw new Error(`Unknown character: ${ACTIVE_CHARACTER}`)
+  if (ACTIVE_CHARACTER !== 'aisha' && ACTIVE_CHARACTER !== 'aisha-sketchfab') throw new Error(`Unknown character: ${ACTIVE_CHARACTER}`)
   return (
     <CharacterErrorBoundary playerProps={props} onPreviewError={onPreviewError}>
       <Suspense fallback={<FrostGirl {...props} />}>
-        <AishaPreview {...props} />
+        {ACTIVE_CHARACTER === 'aisha-sketchfab' ? <AishaPreview {...props} /> : <MeshyAisha {...props} />}
       </Suspense>
     </CharacterErrorBoundary>
   )

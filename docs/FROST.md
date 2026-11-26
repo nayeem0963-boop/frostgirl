@@ -1,3 +1,24 @@
+# Frost — Phase 6.0: the Meshy Aisha in the original game
+
+The original Frost Girl game (`?game=original`) drew a different character from the runner: the Sketchfab "Aisha" preview
+(127 joints, one clip, animated by a procedural rig), with a cone-and-capsule figure as the load-failure fallback. It now
+draws the **Meshy-rigged Aisha** (`public/assets/expedition/aisha.glb`, the same model and clips as the runner).
+
+- `src/game/player/MeshyAisha.jsx`: plays her real clips. `run` at a rate that follows the track speed, `idle` before the
+  start, the jump pose scrubbed by the jump's progress (it always matches the arc), the crouch pose for a slide. It draws
+  only: lanes, jump height, collisions and scoring are unchanged. Cosmetic only, as for every skin.
+- `src/game/player/meshyAishaConfig.js`: the pure rules (state choice, run rate, scale 0.95, facing), unit tested.
+- `characterConfig.js`: `ACTIVE_CHARACTER = 'aisha'` is the Meshy one; `'aisha-sketchfab'` selects the earlier preview and
+  `'placeholder'` the cone figure. The error boundary still falls back to the placeholder if the model fails to load.
+- The runner (World 01-07) is untouched.
+
+## Tests (run here)
+- `npm test`: 188/188 (new `tests/meshyAvatar.test.js`: active character, clips exist in the GLB, state mapping, run rate, facing and size).
+- Manual check, headless Chrome, `?game=original` at 900x560: loaded with no page errors, runs on the track, shadow under her
+  feet, size close to the old avatar. Side-by-side stills were compared by eye. **Not** automatically verified: the jump and slide
+  poses in this game (the game has no debug hook); please jump and slide once on the preview.
+- Real-device frame rate with this model in the original game: not measured.
+
 # Frost — Phase 5.6: World 07, the Celestial Ice Palace finale
 
 World 07 is the last world and uses everything the earlier ones introduced. It adds no new mechanic; it is pure data in

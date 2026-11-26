@@ -1,3 +1,4 @@
+// 'aisha' = the Meshy-rigged Aisha (MeshyAisha.jsx); 'aisha-sketchfab' = the earlier preview model; 'placeholder' = the cone figure
 export const ACTIVE_CHARACTER = 'aisha'
 
 export const AISHA_PREVIEW = {
