@@ -6,7 +6,7 @@ import { Terrain } from './scene/Terrain.jsx'
 import { Forest } from './scene/Forest.jsx'
 import { Rocks } from './scene/Rocks.jsx'
 import { Sky, SUN_DIR, FOG_COLOR } from './scene/Sky.jsx'
-import { MountainMassif } from './scene/Distant.jsx'
+import { MountainMassif, preloadMassif } from './scene/Distant.jsx'
 import { Landmarks } from './scene/Landmarks.jsx'
 import { FrostAnomaly, Snowfall } from './scene/Atmosphere.jsx'
 import { Aisha } from './actors/Aisha.jsx'
@@ -18,6 +18,8 @@ import { Hud } from './ui/Hud.jsx'
 import { Screens } from './ui/Screens.jsx'
 import { TouchControls } from './ui/TouchControls.jsx'
 import './expedition.css'
+
+preloadMassif() // the expedition's mountain backdrop: start the download at once
 
 function detectQuality() {
   const coarse = matchMedia('(pointer: coarse)').matches

@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACESFilmicToneMapping, Color, PointsMaterial, BufferAttribute, BufferGeometry, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
 import { Sky } from '../expedition/scene/Sky.jsx'
-import { MountainMassif } from '../expedition/scene/Distant.jsx'
+import { MountainMassif, preloadMassif } from '../expedition/scene/Distant.jsx'
 import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
@@ -226,6 +226,7 @@ export default function RunnerGame() {
   const [progress, setProgress] = useState(() => loadProgress()) // saved per-world bests and stars (progress.js)
   const [world, setWorld] = useState(() => pickWorld(window.location.search, progress))
   const unlockAll = useMemo(() => unlockAllRequested(), [])
+  useMemo(() => { if (!world.runner.backdrop) preloadMassif() }, [world.runner.backdrop]) // only World 01 draws the 3D massif (3.9 MB): the other worlds use a painted backdrop and never download it
   const [screen, setScreen] = useState('start') // 'start' | 'worlds' (the world-select screen)
   if (!sim.current) { sim.current = createSim(1, world.runner); sim.current.phase = 'ready'; sim.current.anim = 'idle' }
   const [phase, setPhase] = useState('ready')
