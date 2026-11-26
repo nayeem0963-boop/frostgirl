@@ -75,7 +75,7 @@ function patterns(r, d, n, last, w = {}) {
  * Pick the next group of rows. `state` = {n, history: string[], lastRow}. Returns {rows: [{row, gap}], }
  * where `gap` is the seconds between the previous row and this one.
  */
-export function nextPattern(state, r, d, weights = {}) {
+export function nextPattern(state, r, d, weights = {}, gapMul = 1) {
   const list = patterns(r, d, state.n, state.lastRow, weights)
   for (let attempt = 0; attempt < 12; attempt++) {
     const total = list.reduce((s, p) => s + p.weight, 0)
@@ -97,8 +97,8 @@ export function nextPattern(state, r, d, weights = {}) {
     const out = []
     let ok = true
     for (let i = 0; i < rows.length; i++) {
-      const gap = Math.max(baseGap(d) * (i === 0 ? 1 : 0.8), minGap(prev, rows[i]) + 0.12)
-      if (i > 0 && gap > baseGap(d) * 0.8 + 0.5) { ok = false; break } // a combo whose rows cannot be close enough is dropped
+      const gap = Math.max(baseGap(d) * gapMul * (i === 0 ? 1 : 0.8), minGap(prev, rows[i]) + 0.12)
+      if (i > 0 && gap > baseGap(d) * gapMul * 0.8 + 0.5) { ok = false; break } // a combo whose rows cannot be close enough is dropped
       out.push({ row: rows[i], gap })
       prev = rows[i]
     }

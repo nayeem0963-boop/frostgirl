@@ -870,6 +870,9 @@ if (want('settings')) {
   check('every settings button is inside the viewport (800x450)', btns.length >= 5 && btns.every((b) => b.top >= 0 && b.bottom <= 450 && b.left >= 0 && b.right <= 800), JSON.stringify(btns.map((b) => [b.t, Math.round(b.bottom)])))
   await page.getByRole('button', { name: /Reduce motion/ }).click()
   check('Reduce motion cycles auto -> on and sets the in-game switch', (await stored()).motion === 'on' && (await attr('data-reduce-motion')) === 'true')
+  check('Difficulty starts on normal', (await page.getByTestId('difficulty').innerText()) === 'Difficulty: normal')
+  await page.getByTestId('difficulty').click()
+  check('Difficulty cycles normal -> hard and is saved', (await stored()).difficulty === 'hard')
   await page.getByRole('button', { name: /Graphics/ }).click()
   check('Graphics cycles auto -> low and is saved', (await stored()).quality === 'low')
   await page.getByRole('switch', { name: /Left-handed/ }).click()
@@ -883,6 +886,7 @@ if (want('settings')) {
   check('settings survive a reload', (await attr('data-left-handed')) === 'true' && (await attr('data-reduce-motion')) === 'true' && (await attr('data-high-contrast')) === 'true')
   // left-handed: the pause button sits at the left
   await page.keyboard.press('Enter'); await sleep(600)
+  check('a run started on Hard uses the hard generator (sim.difficulty)', (await S(page, () => window.__frostRunner.sim.difficulty)) === 'hard')
   const pb = await page.locator('.runner-pause').boundingBox()
   check('left-handed: the pause button is on the left half of the screen', !!pb && pb.x + pb.width / 2 < 400, JSON.stringify(pb))
   check('no page errors (settings)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))

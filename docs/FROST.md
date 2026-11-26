@@ -1,3 +1,44 @@
+# Frost — Phase 6.5: difficulty levels and a balance report
+
+The plan asked for human play-test notes first. There are none yet, so this PR does the parts that do not need them: it adds the
+Easy / Normal / Hard option and a measuring tool, and it **does not change any Normal number**. Tuning Worlds 02-07 from how they
+actually feel is still open and needs you to play them.
+
+- **Difficulty** (`src/runner/sim/difficulty.js`; Settings > Difficulty; saved with the other settings; default Normal):
+  - Easy: build-up takes 1.5x as long, gaps 20% wider, signature hazards (wolf, shard, hole patterns) x0.6.
+  - Normal: identity. The same weights object and the same multipliers of 1, so rows, bests and the World 01 pins are unchanged.
+  - Hard: build-up x0.7 as long, gaps 8% tighter, signature hazards x1.3.
+  - It changes only the generator. Speed curve, jump, lane glide, collision boxes, the fairness floor (`REACTION`, `SHIFT_TIME`: no
+    gap can be shorter than the rule needs) and each world's mist banks and gust lines are untouched. The chosen level is shown on
+    the start screen. Auto play uses it too.
+  - **Open decision for you:** stars and bests are recorded the same on every level, so 3 stars on Easy equals 3 stars on Hard.
+    Options: leave it, cap Easy at 2 stars, or keep separate bests per level. I left it as is rather than guess.
+- **Balance report** (`node scripts/difficulty-report.mjs [seeds]`, node only): runs the Auto play bot over every world and level
+  and prints rows per 100 m, seconds per row, hazard share, near misses per 100 m, orb share and finish rate.
+  Measured with 6 seeds per cell (the bot, not a person; near misses are a proxy for tight passes):
+
+| world | level | rows/100 m | s/row | hazard % | close/100 m | orbs % | done |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 01 | easy / normal / hard | 4.4 / 5.8 / 6.7 | 2.17 / 1.67 / 1.42 | 0 | 0.79 / 0.89 / 1.02 | 89 / 87 / 85 | 6/6 each |
+| 02 | easy / normal / hard | 4.4 / 5.8 / 6.8 | 2.16 / 1.66 / 1.42 | 13 / 19 / 19 | 0.54 / 0.63 / 0.67 | 90 / 91 / 88 | 6/6 each |
+| 03 | easy / normal / hard | 4.4 / 5.8 / 6.7 | 2.13 / 1.63 / 1.41 | 13 / 17 / 22 | 0.70 / 0.66 / 0.80 | 90 / 89 / 85 | 6/6 each |
+| 04 | easy / normal / hard | 4.5 / 5.8 / 6.8 | 2.11 / 1.61 / 1.39 | 15 / 20 / 25 | 0.78 / 1.00 / 0.90 | 80 / 78 / 70 | 6/6 each |
+| 05 | easy / normal / hard | 4.4 / 5.9 / 6.7 | 2.12 / 1.59 / 1.39 | 0 | 0.61 / 0.92 / 1.08 | 90 / 88 / 85 | 6/6 each |
+| 06 | easy / normal / hard | 4.3 / 5.6 / 6.4 | 2.15 / 1.64 / 1.44 | 0 | 0.62 / 0.89 / 0.90 | 89 / 89 / 87 | 6/6 each |
+| 07 | easy / normal / hard | 4.4 / 5.7 / 6.6 | 2.09 / 1.61 / 1.40 | 17 / 24 / 27 | 0.58 / 0.63 / 0.78 | 85 / 84 / 80 | 6/6 each |
+
+  What this says, and what it does not: each level is clearly ordered (Easy has about 25% fewer rows than Normal, Hard about 16% more). At
+  Normal the worlds are almost equally dense (5.6-5.9 rows per 100 m): their difference comes from the kind of obstacle, not how many.
+  World 07 has the most hazard rows (24%) but not the bot's tightest passes, so the report alone does not show it as the hardest. World
+  04 is the hardest for orbs (78% on Normal). This is the bot; whether Worlds 02-07 feel balanced for a person is not measured.
+
+## Tests (run here)
+- `npm test`: 211/211 (new `tests/difficulty.test.js`, 7 tests: Normal identical to the old generator, ordering of the levels, only
+  hazard patterns scaled and world data untouched, the fairness floor on Worlds 02/04/07 at every level, mean gap and hazard share
+  ordering, the bot finishes all 7 worlds x 3 levels x 2 seeds).
+- `ONLY=settings` 20/20: the Difficulty button cycles and is saved, and a run started on Hard really uses it (`sim.difficulty`). Regression `ONLY=desktop,phone,auto,level,worlds,select,feel` 139/139 (includes whole levels in the browser and the Retry/Restart button at 1534x630).
+- Not verified: how Easy and Hard feel to a person, real-device play.
+
 # Frost — Phase 6.4: first-run hint and settings
 
 None of these settings touches the simulation (speed, collisions, scoring, generator), so scores stay comparable.
