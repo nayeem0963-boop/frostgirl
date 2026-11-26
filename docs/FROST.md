@@ -1,3 +1,35 @@
+# Frost — Phase 6.1: quality tiers and a frame-time readout
+
+I cannot test on a phone from here, so this PR builds the two things that make a real-device test possible and safe, and it does
+**not** claim any real-device frame rate. Every frame-rate number in this project so far is still unmeasured on real hardware.
+
+- **Tiers** (`src/runner/quality.js`): `high` > `low` > `min`. A tier changes only how the scene is drawn (pixel ratio 2 / 1.5 / 1,
+  snow flakes, tree detail ranges); it never touches the simulation. Antialiasing is fixed when the canvas is created, so a live
+  step-down cannot change it.
+- **Adaptive** (Graphics: auto, the default): a visit starts on what the screen suggests (`low` on phones and small screens), or lower
+  if this device was measured to need it (remembered in `localStorage`, `frost-runner-tier-v1`). A frame-time meter then steps the
+  tier down when the average frame time over the last 90 frames is above 28 ms (under about 36 fps), after a 2.5 s warm-up and with a
+  4 s cooldown between steps. It never steps up within a visit (no flapping), and stops at `min`. A single hitch or a tab switch
+  counts as one frame capped at 250 ms, while a device whose every frame is that slow still reads as slow (found by a test: the first
+  version discarded such frames and could never step down a very slow device).
+- **Manual choices are exact:** Settings > Graphics `low` or `high` never changes. Settings shows the tier in use, e.g. "auto (high)".
+- **URL flags for testing on a device:** `&fps` shows a live readout (`58 fps · avg 17.2 ms · p95 21 ms · tier high · 1170x2532px @3x`);
+  `&tier=high|low|min` forces a tier; `&debug` runs (tests, budget scripts) never adapt unless `&adapt` is added, so measurements keep
+  their tier.
+- **Not changed:** the simulation, the budget scripts' numbers, and how any world looks at its start tier.
+
+## Tests (run here)
+- `npm test`: 235/235 (new `tests/quality.test.js`, 10 tests: tier order and cost, meter statistics, steady 60/40 fps never
+  stepped down, a 20 fps device stepped down but not during warm-up, hitches capped, a 2.5 fps device still stepped down, cooldown
+  and a fresh window before another step, saved tier and bad storage, start tier and manual choices).
+- `ONLY=quality` 13/13 in headless Chrome at 800x600 with a pixel ratio of 2 (a slow software renderer, ~4 fps, makes a good slow
+  device): starts on `high` (canvas 2x), steps to `low` (1.5x) and then `min` (1x) and stops, the readout shows fps, frame times and tier,
+  the tier is remembered and used on the next visit, a manual `high` never steps down, `&tier=low` is exact, `&debug` alone never adapts,
+  and the run keeps running normally.
+- Regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality` 195/195 (whole levels in the browser; the Retry/Restart button inside the viewport at 1534x630 and on phones).
+- **Not measured:** any real phone. To measure one, open the game on it with `&fps` added to the address, play for a minute and
+  send me the numbers in the readout (and what tier it settled on).
+
 # Frost — Phase 6.7: technical health (load size, caching, offline, checks)
 
 Measured with `node scripts/net-report.mjs <built-dir> [query]`: it serves a built folder itself (with ETags like a real static host)

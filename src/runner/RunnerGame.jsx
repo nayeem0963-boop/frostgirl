@@ -24,7 +24,8 @@ import { RunnerAisha } from './scene/RunnerAisha.jsx'
 import { createSim, startRun, resetToReady, update, command, aheadOf } from './sim/sim.js'
 import { attachInput } from './sim/input.js'
 import { buzz, hapticsSupported } from './feel.js'
-import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, resolveQuality, showHint } from './settings.js'
+import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, showHint } from './settings.js'
+import { TIERS, TIER_DATA, FrameMeter, activeTier, loadTier, nextTierDown, saveTier, snowCount, startTier } from './quality.js'
 import { createBot, botStep } from './sim/bot.js'
 import { cameraFor, cameraTarget } from './sim/camera.js'
 import './runner.css'
@@ -71,7 +72,7 @@ function Shadow({ sim }) {
 }
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
-function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, debug }) {
+function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, meter, adaptive, onDowngrade, debug }) {
   const gl = useThree((st) => st.gl)
   const scene = useThree((st) => st.scene)
   const cam = useThree((st) => st.camera)
@@ -87,6 +88,10 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceM
     const dt = Math.min(rawDt, 0.05)
     const t0 = debug ? performance.now() : 0
     update(s, rawDt)
+    if (s.phase === 'running' && !s.paused) { // frame times feed the quality meter; it only ever lowers the draw cost, never touches the sim
+      meter.push(rawDt * 1000)
+      if (adaptive.current && meter.verdict() === 'down') onDowngrade()
+    }
     for (const e of s.events) { // felt events: a short vibration (not in Auto play, or when switched off) and the 'Close!' pop
       buzz(e, { enabled: haptics.current, auto: s.auto })
       if (e === 'nearMiss') onClose()
@@ -124,6 +129,20 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceM
   return null
 }
 
+
+/** ?fps: a live readout for measuring on a real device (frame rate, frame times, the tier in use, the screen and its pixel ratio). */
+function FpsReadout({ meter, tier }) {
+  const [text, setText] = useState('fps …')
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = meter.stats()
+      const c = document.querySelector('.runner-root canvas')
+      setText(s.n ? `${s.fps.toFixed(0)} fps · avg ${s.avg.toFixed(1)} ms · p95 ${s.p95.toFixed(1)} ms · tier ${tier} · ${c ? `${c.width}x${c.height}px` : ''} @${window.devicePixelRatio}x` : 'fps … (play to measure)')
+    }, 500)
+    return () => clearInterval(id)
+  }, [meter, tier])
+  return <div className="runner-fps" data-testid="fps-readout" aria-hidden="true">{text}</div>
+}
 
 /** A short burst of ice/snow shards from the point of impact. 40 pooled points, only alive for ~0.8 s after a hit. */
 const SHARDS = 40
@@ -174,7 +193,7 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, debug }) {
+function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -183,7 +202,7 @@ function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose
       <hemisphereLight args={[t.light.hemiSky, t.light.hemiGround, t.light.hemiIntensity]} />
       <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
-      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} debug={debug} />
+      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} debug={debug} />
       {t.mist && <MistFog sim={sim} theme={t} />}
       {t.gust && <Gusts sim={sim} gust={t.gust} />}
       <Sky colors={t.sky} />
@@ -192,7 +211,7 @@ function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose
       {!endless && <FinishGate sim={sim} />}
       <Shadow sim={sim} />
       <HitBurst sim={sim} />
-      <Snowfall count={t.snow.count[quality] ?? t.snow.count.high} paused={false} color={t.snow.color} />
+      <Snowfall count={snowCount(t, quality)} paused={false} color={t.snow.color} />
       <Suspense fallback={null}>
         <RunnerForest sim={sim} quality={quality} />
         <RunnerAisha sim={sim} debug={debug} />
@@ -252,10 +271,21 @@ export default function RunnerGame() {
   useEffect(() => { screenRef.current = screen }, [screen])
   const bot = useRef(null)
   const [loaded, setLoaded] = useState(false)
-  const [detected] = useState(detectQuality)
-  const quality = resolveQuality(settings, detected)
+  // Quality tier: 'auto' starts from what the screen suggests (or lower, if this device was measured to need it) and steps down when
+  // frames are slow (quality.js); a manual Graphics choice, or ?tier=high|low|min in the URL, is exact. ?fps shows a live readout.
+  const flags = useMemo(() => { const p = new URLSearchParams(window.location.search); const t = p.get('tier'); return { fps: p.has('fps'), tier: TIERS.includes(t) ? t : null, adapt: p.has('adapt'), debug: p.has('debug') } }, [])
+  const [autoTier, setAutoTier] = useState(() => startTier(detectQuality(), loadTier()))
+  const quality = flags.tier ?? activeTier(settings.quality, autoTier)
+  const meter = useMemo(() => new FrameMeter(), [])
+  const adaptive = useRef(false)
+  const qualityRef = useRef(quality)
+  const adaptiveOn = settings.quality === 'auto' && !flags.tier && nextTierDown(quality) !== null && (!flags.debug || flags.adapt) // nothing lower than min to step to; ?debug runs (tests, measurements) keep their tier unless ?adapt is added
+  useEffect(() => { adaptive.current = adaptiveOn; qualityRef.current = quality }, [adaptiveOn, quality])
+  const onDowngrade = useCallback(() => { const n = nextTierDown(qualityRef.current); if (n) { setAutoTier(n); saveTier(n) } }, [])
+  const glConfig = useMemo(() => ({ antialias: quality === 'high', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }), []) // eslint-disable-line react-hooks/exhaustive-deps -- antialiasing is fixed when the canvas is created
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
+  useEffect(() => { if (debug) debug.meter = meter }, [debug, meter]) // ?debug: tests shorten the meter's window
   const hitAt = useRef(0)
   const progressRef = useRef(progress)
   useEffect(() => { progressRef.current = progress }, [progress])
@@ -311,13 +341,14 @@ export default function RunnerGame() {
     clearTimeout(autoTimer.current)
     const s = sim.current
     s.world = w.runner
+    meter.reset() // a new world compiles and uploads new things: give it a fresh warm-up
     resetToReady(s)
     s.auto = false; s.driver = null
     setAuto(false); setScore(0); setOrbs(0); setOutcome(null); setShowOver(false)
     setWorld(w); setScreen('start')
     try { const u = new URL(window.location.href); u.searchParams.set('world', id); window.history.replaceState(null, '', u) } catch { /* no history API */ }
     return true
-  }, [progress, unlockAll])
+  }, [progress, unlockAll, meter])
   const togglePause = useCallback(() => {
     const s = sim.current
     if (s.phase === 'running') s.paused = !s.paused
@@ -374,13 +405,13 @@ export default function RunnerGame() {
   }, [debug, start, startAuto, exitAuto, selectWorld])
 
   return (
-    <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded} data-reduce-motion={reduceMotion} data-left-handed={settings.leftHanded} data-high-contrast={settings.highContrast}>
+    <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded} data-reduce-motion={reduceMotion} data-left-handed={settings.leftHanded} data-high-contrast={settings.highContrast} data-tier={quality}>
       <Canvas
-        dpr={quality === 'low' ? [1, 1.5] : [1, 2]}
+        dpr={(TIER_DATA[quality] ?? TIER_DATA.high).dpr}
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
-        gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
+        gl={glConfig}
       >
-        <Scene sim={sim} quality={quality} world={world} endless={endless} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} endless={endless} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
       </Canvas>
 
       {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
@@ -400,6 +431,8 @@ export default function RunnerGame() {
           <span>{finish} m</span>
         </div>
       )}
+
+      {flags.fps && <FpsReadout meter={meter} tier={quality} />}
 
       {!loaded && <div className="runner-screen"><p className="runner-loading">Loading Frost…</p></div>}
 
@@ -453,7 +486,7 @@ export default function RunnerGame() {
             {hapticsSupported() && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.haptics} onClick={() => change({ haptics: !settings.haptics })}>Vibration: {settings.haptics ? 'on' : 'off'}</button></li>}
             <li><button className="runner-btn runner-btn-alt" data-testid="difficulty" onClick={() => change({ difficulty: nextChoice('difficulty', settings.difficulty) })}>Difficulty: {settings.difficulty}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ motion: nextChoice('motion', settings.motion) })}>Reduce motion: {settings.motion}</button></li>
-            <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}</button></li>
+            <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}{settings.quality === 'auto' ? ` (${quality})` : ''}</button></li>
             <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.leftHanded} onClick={() => change({ leftHanded: !settings.leftHanded })}>Left-handed layout: {settings.leftHanded ? 'on' : 'off'}</button></li>
             <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.highContrast} onClick={() => change({ highContrast: !settings.highContrast })}>High-contrast obstacles: {settings.highContrast ? 'on' : 'off'}</button></li>
           </ul>

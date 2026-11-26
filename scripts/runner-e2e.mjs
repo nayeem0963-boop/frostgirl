@@ -1018,6 +1018,60 @@ if (want('offline')) {
   await ctx.close()
 }
 
+if (want('quality')) {
+  // frame-time measurement and quality tiers. Software-rendered headless Chrome is slow (a few fps), which makes a good "slow device".
+  const slow = async (ctxOpts, query, settingsJson) => {
+    const ctx = await browser.newContext({ viewport: { width: 800, height: 600 }, deviceScaleFactor: 2, ...ctxOpts }) // 600 px or more on the short side: the screen suggests the high tier
+    if (settingsJson) await ctx.addInitScript((j) => { try { if (!localStorage.getItem('frost-runner-settings-v1')) localStorage.setItem('frost-runner-settings-v1', j) } catch { /* ignore */ } }, settingsJson)
+    const page = await ctx.newPage(); active = page
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto(`${base}/?game=frost&debug${query}`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await S(page, () => { const m = window.__frostRunner.debug.meter; m.o.window = 20; m.o.warmup = 1; m.o.cooldown = 2 }) // a short window so the test does not take minutes
+    return { ctx, page, errors }
+  }
+  const tier = (page) => S(page, () => document.querySelector('.runner-root').getAttribute('data-tier'))
+  const ratio = (page) => S(page, () => { const c = document.querySelector('.runner-root canvas'); return c.width / c.clientWidth })
+  const waitTier = async (page, want, ms) => { const end = Date.now() + ms; while (Date.now() < end) { if ((await tier(page)) === want) return true; await realSleep(300) } return false }
+  const startRunning = async (page) => { await page.keyboard.press('Enter'); await sleep(300); await clear(page) }
+
+  // 1. adaptive: a slow device steps high -> low -> min, the pixel ratio follows, and the result is remembered
+  { const { ctx, page, errors } = await slow({}, '&adapt&fps')
+    check('starts on the high tier on a big screen', (await tier(page)) === 'high' && (await ratio(page)) > 1.9, `${await tier(page)} x${await ratio(page)}`)
+    await startRunning(page)
+    check('a slow device steps down to low', await waitTier(page, 'low', 120000))
+    const r1 = await ratio(page)
+    check('the pixel ratio dropped with the tier (about 1.5 at low)', r1 > 1.4 && r1 < 1.6, `x${r1}`)
+    check('and on to min, which stops there', await waitTier(page, 'min', 120000))
+    check('min draws at pixel ratio 1', Math.abs((await ratio(page)) - 1) < 0.05, `x${await ratio(page)}`)
+    let readout = ''; for (let i = 0; i < 40; i++) { readout = await page.getByTestId('fps-readout').innerText(); if (/ fps · avg .* ms · p95 .* ms · tier min/.test(readout)) break; await realSleep(250) } // the readout refreshes twice a second
+    check('the readout shows fps, frame times and the tier', / fps · avg .* ms · p95 .* ms · tier min/.test(readout), readout)
+    check('the lowest tier reached is remembered on this device', (await S(page, () => localStorage.getItem('frost-runner-tier-v1'))) === 'min')
+    await page.screenshot({ path: `${out}/36-quality-min.png` })
+    check('the run itself was unaffected (still running, moving)', (await sim(page)).phase === 'running' && (await sim(page)).dist > 0)
+    check('no page errors (quality)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+    // 2. the next visit starts on the remembered tier
+    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(600)
+    check('the next visit starts on the remembered tier (min)', (await tier(page)) === 'min')
+    await ctx.close() }
+
+  // 3. manual Graphics choice is exact: no adaptation even when frames are slow
+  { const { ctx, page } = await slow({}, '&adapt', JSON.stringify({ quality: 'high' }))
+    await startRunning(page)
+    await sleep(12000)
+    check('a manual Graphics choice (high) never steps down', (await tier(page)) === 'high' && (await S(page, () => localStorage.getItem('frost-runner-tier-v1'))) === null)
+    await ctx.close() }
+
+  // 4. ?tier= forces a tier; ?debug without ?adapt never adapts (the measurement and test scripts rely on that)
+  { const { ctx, page } = await slow({}, '&tier=low')
+    await startRunning(page); await sleep(6000)
+    check('?tier=low forces the tier and keeps it', (await tier(page)) === 'low' && Math.abs((await ratio(page)) - 1.5) < 0.1)
+    await ctx.close() }
+  { const { ctx, page } = await slow({}, '')
+    await startRunning(page); await sleep(12000)
+    check('?debug alone never adapts (budget and e2e runs keep their tier)', (await tier(page)) === 'high')
+    await ctx.close() }
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })
