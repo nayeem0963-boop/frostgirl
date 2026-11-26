@@ -1,7 +1,7 @@
 // Visuals for the obstacle pool. The meshes are decoration only: collision
 // uses the independent boxes in config.js / sim.js. One InstancedMesh per kind.
 import { useFrame } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   BoxGeometry, BufferAttribute, Color, ConeGeometry, CylinderGeometry, InstancedMesh, MeshStandardMaterial,
   Object3D, SphereGeometry, PlaneGeometry, CanvasTexture, MeshBasicMaterial, SRGBColorSpace, DoubleSide, AdditiveBlending,
@@ -171,8 +171,8 @@ function softTexture() {
 const SHADOW = { wall: [2.7, 1.9], ridge: [7.6, 1.7], arch: [7.2, 1.9], wolf: [1.9, 2.0], shard: [2.1, 1.8], hole: null } // (a hole has no footprint: it is one) // footprint under each obstacle
 const MARK_AHEAD = 8
 
-export function Obstacles({ sim }) {
-  const { group, meshes, marks, shadow } = useMemo(() => {
+export function Obstacles({ sim, highContrast = false }) {
+  const { group, meshes, marks, shadow, mat } = useMemo(() => {
     const mat = new MeshStandardMaterial({
       vertexColors: true, roughness: 0.22, metalness: 0.05, flatShading: true,
       emissive: new Color('#2f78b8'), emissiveIntensity: 0.5,
@@ -200,8 +200,10 @@ export function Obstacles({ sim }) {
     }
     const shadow = new InstancedMesh(flat, markMat(softTexture()), POOL)
     for (const m of [...Object.values(marks), shadow]) { m.frustumCulled = false; m.count = 0; m.renderOrder = 1; group.add(m) }
-    return { group, meshes, marks, shadow }
+    return { group, meshes, marks, shadow, mat }
   }, [])
+  // high-contrast setting: a warm amber glow on walls, pines, arches and spires (distinct from snow and ice in luminance and hue)
+  useEffect(() => { mat.emissive.set(highContrast ? '#ffa81f' : '#2f78b8'); mat.emissiveIntensity = highContrast ? 0.85 : 0.5 }, [mat, highContrast])
   const tmp = useMemo(() => new Object3D(), [])
   useFrame(({ clock }) => {
     const s = sim.current

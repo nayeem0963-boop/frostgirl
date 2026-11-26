@@ -1,3 +1,30 @@
+# Frost — Phase 6.4: first-run hint and settings
+
+None of these settings touches the simulation (speed, collisions, scoring, generator), so scores stay comparable.
+
+- **First-run hint** (`settings.js`): a small "Swipe or use the arrow keys..." pill on the very first run. It goes away with the
+  first jump (or after 110 m, about 15 s, so it never lingers), is remembered, and is never shown in Auto play.
+- **Settings sheet** (start screen, "Settings"; Esc or Back closes it), saved in `localStorage` (`frost-runner-settings-v1`;
+  bad or hand-edited values fall back per field; the 6.3 vibration choice is carried over once):
+  - Vibration on/off (only listed when the device supports it).
+  - Reduce motion: auto (follows the system) / on / off. On = no impact shake, no flash, no pop-in animations.
+  - Graphics: auto (from screen size and pointer) / low / high.
+  - Left-handed layout: the pause button moves to the left edge.
+  - High-contrast obstacles: a warm amber glow on walls, fallen pines, arches and crystal spires.
+    The wolf and the ice hole are **not** covered by this yet.
+- **Already in place, checked:** the run pauses when the tab is hidden (`visibilitychange`); `prefers-reduced-motion` is honoured.
+- The vibration switch moved from the start screen into the sheet, so the start screen stays short on phones in landscape.
+
+## Tests (run here)
+- `npm test`: 204/204 (new `tests/settings.test.js`, 8 tests: defaults, round trip, bad/hand-edited saves, 6.3 migration,
+  choice cycling, reduce-motion and quality resolution, hint rules).
+- `ONLY=settings,feel`: 26/26 in headless Chrome (hint shown, goes with the first jump, remembered, not shown again; every
+  setting changes and is saved and survives a reload; amber glow value read from the obstacle material; left-handed pause
+  button on the left; the sheet and the start screen fit in the viewport at 800x450, 390x844 and 844x390).
+- Regression: `ONLY=desktop,phone,auto,settings,feel` 93/93 (includes the Retry/Restart button inside the viewport at 1534x630 and on phones).
+- Not verified: colour-blind simulation of the amber glow (chosen for hue and luminance difference against snow/ice, not
+  measured with a simulator); screen-reader pass; real-device feel.
+
 # Frost — Phase 6.3: game feel and clearer warnings
 
 Cosmetic feedback only: nothing here changes scoring, collisions, speed or the generator, and the World 01 pins still pass.

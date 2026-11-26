@@ -798,7 +798,9 @@ if (want('feel')) {
     active = page
     return { ctx, page, errors }
   })()
-  check('start screen offers a Vibration switch (device reports support)', (await page.getByRole('switch', { name: /Vibration: on/ }).count()) === 1)
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(200)
+  check('Settings offers a Vibration switch (device reports support)', (await page.getByRole('switch', { name: /Vibration: on/ }).count()) === 1)
+  await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
   await page.keyboard.press('Enter'); await sleep(400); await clear(page)
   // a wall just beside her (0.12 m of clearance): a near miss, no crash, "Close!" and a short pulse
   await S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, passed: false, kind: 'wall', lane: 2, side: 0, x: s.x + 0.95 + 0.32 + 0.12, dist: s.dist + 14, id: 7001 }) })
@@ -820,17 +822,88 @@ if (want('feel')) {
   await ctx.addInitScript(() => { window.__buzz = []; navigator.vibrate = (p) => { window.__buzz.push(p); return true } })
   const page = await ctx.newPage(); active = page
   await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(200)
   await page.getByRole('switch', { name: /Vibration/ }).click()
-  check('the Vibration switch turns off and the choice is saved', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1 && (await S(page, () => localStorage.getItem('frost-runner-haptics-v1'))) === 'off')
+  check('the Vibration switch turns off and the choice is saved', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1 && JSON.parse(await S(page, () => localStorage.getItem('frost-runner-settings-v1'))).haptics === false)
+  await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
   await page.keyboard.press('Enter'); await sleep(400); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
   check('with vibration off a hit makes no vibration', (await S(page, () => window.__buzz.length)) === 0)
   await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(200)
   check('the choice survives a reload', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1)
   await page.getByRole('switch', { name: /Vibration/ }).click() // back on, so the next check is about Auto play only
+  await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
   await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
   for (let i = 0; i < 400; i++) { if ((await S(page, () => window.__frostRunner.sim.count.orb ?? 0)) > 0) break; await realSleep(50) }
   check('Auto play never vibrates', (await S(page, () => window.__buzz.length)) === 0)
   await ctx.close()
+}
+
+if (want('settings')) {
+  const { ctx, page, errors } = await (async () => {
+    const ctx = await browser.newContext({ viewport: { width: 800, height: 450 }, deviceScaleFactor: 1 })
+    await ctx.addInitScript(() => { navigator.vibrate = () => true })
+    const page = await ctx.newPage(); const errors = []
+    page.on('pageerror', (e) => errors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    active = page
+    return { ctx, page, errors }
+  })()
+  const attr = (n) => S(page, (n) => document.querySelector('.runner-root').getAttribute(n), n)
+  const stored = () => S(page, () => JSON.parse(localStorage.getItem('frost-runner-settings-v1') ?? '{}'))
+  // first-run hint: shows on the first run, goes away with the first jump, and is not shown again
+  await page.keyboard.press('Enter'); await sleep(500); await clear(page)
+  check('first run: the controls hint is shown', (await page.getByTestId('first-run-hint').count()) === 1)
+  await page.screenshot({ path: `${out}/30-first-run-hint.png` })
+  await page.keyboard.press('Space'); await sleep(500)
+  check('the hint goes away with the first jump', (await page.getByTestId('first-run-hint').count()) === 0)
+  check('and is remembered (hintSeen)', (await stored()).hintSeen === true)
+  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  await page.keyboard.press('Enter'); await sleep(500)
+  check('a later run does not show the hint again', (await page.getByTestId('first-run-hint').count()) === 0)
+  await page.keyboard.press('Escape'); await sleep(200) // pause, then back to the start screen
+  await S(page, () => { const s = window.__frostRunner.sim; s.paused = false; s.phase = 'ready' }); await sleep(400)
+  // the settings sheet
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(300)
+  await page.screenshot({ path: `${out}/31-settings.png` })
+  const btns = await page.locator('[data-screen="settings"] button').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { t: e.innerText, top: r.top, bottom: r.bottom, left: r.left, right: r.right } }))
+  check('every settings button is inside the viewport (800x450)', btns.length >= 5 && btns.every((b) => b.top >= 0 && b.bottom <= 450 && b.left >= 0 && b.right <= 800), JSON.stringify(btns.map((b) => [b.t, Math.round(b.bottom)])))
+  await page.getByRole('button', { name: /Reduce motion/ }).click()
+  check('Reduce motion cycles auto -> on and sets the in-game switch', (await stored()).motion === 'on' && (await attr('data-reduce-motion')) === 'true')
+  await page.getByRole('button', { name: /Graphics/ }).click()
+  check('Graphics cycles auto -> low and is saved', (await stored()).quality === 'low')
+  await page.getByRole('switch', { name: /Left-handed/ }).click()
+  check('Left-handed layout is saved and switches the layout', (await stored()).leftHanded === true && (await attr('data-left-handed')) === 'true')
+  await page.getByRole('switch', { name: /High-contrast/ }).click()
+  const glow = () => S(page, () => { const sc = window.__frostRunner.debug.scene; let c = null; sc.traverse((o) => { if (o.isInstancedMesh && o.material?.emissive && o.material.vertexColors && c === null) c = o.material.emissive.getHexString() }); return c })
+  check('High-contrast obstacles turn the obstacle glow amber', (await stored()).highContrast === true && (await glow()) === 'ffa81f', String(await glow()))
+  await page.keyboard.press('Escape'); await sleep(300)
+  check('Esc closes the settings sheet', (await page.locator('[data-screen="start"]').count()) === 1)
+  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  check('settings survive a reload', (await attr('data-left-handed')) === 'true' && (await attr('data-reduce-motion')) === 'true' && (await attr('data-high-contrast')) === 'true')
+  // left-handed: the pause button sits at the left
+  await page.keyboard.press('Enter'); await sleep(600)
+  const pb = await page.locator('.runner-pause').boundingBox()
+  check('left-handed: the pause button is on the left half of the screen', !!pb && pb.x + pb.width / 2 < 400, JSON.stringify(pb))
+  check('no page errors (settings)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('settings')) {
+  // the sheet fits on phones, portrait and landscape
+  for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
+    const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
+    await ctx.addInitScript(() => { navigator.vibrate = () => true })
+    const page = await ctx.newPage(); active = page
+    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    const startBtns = await page.locator('[data-screen="start"] button').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().bottom))
+    check(`[phone-${tag}] the start screen still fits with the Settings button`, startBtns.every((b) => b <= vp.height), JSON.stringify(startBtns.map(Math.round)))
+    await page.getByRole('button', { name: 'Settings' }).tap(); await sleep(300)
+    await page.screenshot({ path: `${out}/32-settings-${tag}.png` })
+    const btns = await page.locator('[data-screen="settings"] button').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right } }))
+    check(`[phone-${tag}] every settings button is inside the viewport`, btns.every((b) => b.top >= 0 && b.bottom <= vp.height && b.left >= 0 && b.right <= vp.width), JSON.stringify(btns.map((b) => Math.round(b.bottom))))
+    await ctx.close()
+  }
 }
 
 // Retry/Restart button stays on screen at 1534x630 and on phones
