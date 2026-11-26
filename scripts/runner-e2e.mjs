@@ -787,6 +787,52 @@ if (want('palace')) {
   await ctx.close()
 }
 
+if (want('feel')) {
+  // vibration is stubbed so the calls can be counted (desktop Chrome has no motor); the sim is run for real
+  const { ctx, page, errors } = await (async () => {
+    const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 })
+    await ctx.addInitScript(() => { window.__buzz = []; navigator.vibrate = (p) => { window.__buzz.push(p); return true } })
+    const page = await ctx.newPage(); const errors = []
+    page.on('pageerror', (e) => errors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    active = page
+    return { ctx, page, errors }
+  })()
+  check('start screen offers a Vibration switch (device reports support)', (await page.getByRole('switch', { name: /Vibration: on/ }).count()) === 1)
+  await page.keyboard.press('Enter'); await sleep(400); await clear(page)
+  // a wall just beside her (0.12 m of clearance): a near miss, no crash, "Close!" and a short pulse
+  await S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, passed: false, kind: 'wall', lane: 2, side: 0, x: s.x + 0.95 + 0.32 + 0.12, dist: s.dist + 14, id: 7001 }) })
+  let seen = false
+  for (let i = 0; i < 300 && !seen; i++) { seen = await page.getByTestId('close-call').count() > 0; if (!seen) await realSleep(30) }
+  await page.screenshot({ path: `${out}/29-close-call.png` })
+  check('a near miss shows "Close!" and the run goes on', seen && (await sim(page)).phase === 'running')
+  check('a near miss vibrates once, lightly', JSON.stringify(await S(page, () => window.__buzz.filter((p) => p === 14))) === '[14]')
+  await sleep(1200)
+  check('"Close!" fades away by itself (opacity 0 after its animation)', (await S(page, () => { const e = document.querySelector('[data-testid="close-call"]'); return e ? getComputedStyle(e).opacity : '0' })) === '0')
+  // a real hit vibrates with the hit pattern
+  await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
+  check('a hit vibrates with the hit pattern', (await S(page, () => window.__buzz.some((p) => Array.isArray(p) && p[0] === 45))))
+  await ctx.close()
+}
+
+if (want('feel')) {
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 })
+  await ctx.addInitScript(() => { window.__buzz = []; navigator.vibrate = (p) => { window.__buzz.push(p); return true } })
+  const page = await ctx.newPage(); active = page
+  await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+  await page.getByRole('switch', { name: /Vibration/ }).click()
+  check('the Vibration switch turns off and the choice is saved', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1 && (await S(page, () => localStorage.getItem('frost-runner-haptics-v1'))) === 'off')
+  await page.keyboard.press('Enter'); await sleep(400); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
+  check('with vibration off a hit makes no vibration', (await S(page, () => window.__buzz.length)) === 0)
+  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  check('the choice survives a reload', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1)
+  await page.getByRole('switch', { name: /Vibration/ }).click() // back on, so the next check is about Auto play only
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  for (let i = 0; i < 400; i++) { if ((await S(page, () => window.__frostRunner.sim.count.orb ?? 0)) > 0) break; await realSleep(50) }
+  check('Auto play never vibrates', (await S(page, () => window.__buzz.length)) === 0)
+  await ctx.close()
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

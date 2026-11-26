@@ -23,6 +23,7 @@ import { Orbs } from './scene/Orbs.jsx'
 import { RunnerAisha } from './scene/RunnerAisha.jsx'
 import { createSim, startRun, resetToReady, update, command, aheadOf } from './sim/sim.js'
 import { attachInput } from './sim/input.js'
+import { buzz, hapticsSupported, loadHaptics, saveHaptics } from './feel.js'
 import { createBot, botStep } from './sim/bot.js'
 import { cameraFor, cameraTarget } from './sim/camera.js'
 import './runner.css'
@@ -69,7 +70,7 @@ function Shadow({ sim }) {
 }
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
-function Loop({ sim, onPhase, onScore, onOrbs, debug }) {
+function Loop({ sim, onPhase, onScore, onOrbs, onClose, haptics, debug }) {
   const gl = useThree((st) => st.gl)
   const scene = useThree((st) => st.scene)
   const cam = useThree((st) => st.camera)
@@ -85,7 +86,11 @@ function Loop({ sim, onPhase, onScore, onOrbs, debug }) {
     const dt = Math.min(rawDt, 0.05)
     const t0 = debug ? performance.now() : 0
     update(s, rawDt)
-    s.events.length = 0 // nothing consumes frame events yet; keep the queue from growing
+    for (const e of s.events) { // felt events: a short vibration (not in Auto play, or when switched off) and the 'Close!' pop
+      buzz(e, { enabled: haptics.current, auto: s.auto })
+      if (e === 'nearMiss') onClose()
+    }
+    s.events.length = 0 // keep the queue from growing
     if (debug) { debug.frames = (debug.frames ?? 0) + 1; const ms = performance.now() - t0; debug.simMs = (debug.simMs ?? ms) * 0.95 + ms * 0.05 }
 
     const rig = cameraFor(size.width / size.height)
@@ -167,7 +172,7 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
+function Scene({ sim, quality, world, onPhase, onScore, onOrbs, onClose, haptics, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -176,7 +181,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, debug }) {
       <hemisphereLight args={[t.light.hemiSky, t.light.hemiGround, t.light.hemiIntensity]} />
       <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
-      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} debug={debug} />
+      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} haptics={haptics} debug={debug} />
       {t.mist && <MistFog sim={sim} theme={t} />}
       {t.gust && <Gusts sim={sim} gust={t.gust} />}
       <Sky colors={t.sky} />
@@ -225,6 +230,11 @@ export default function RunnerGame() {
   const [paused, setPaused] = useState(false)
   const [score, setScore] = useState(0)
   const [orbs, setOrbs] = useState(0)
+  const [close, setClose] = useState(0) // counts 'Close!' pops (a near miss: an obstacle passed within a hand's width)
+  const [haptics, setHaptics] = useState(loadHaptics) // vibration on pickups, gusts, near misses and hits (phones that have it)
+  const hapticsRef = useRef(haptics)
+  useEffect(() => { hapticsRef.current = haptics; saveHaptics(haptics) }, [haptics])
+  const onClose = useCallback(() => setClose((n) => n + 1), [])
   const [outcome, setOutcome] = useState(null) // {completed, stars, distance, orbs, seen} of the run that just ended
   const [auto, setAuto] = useState(false) // Auto play: watch-only, the bot drives
   const autoTimer = useRef(0)
@@ -345,9 +355,10 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
       >
-        <Scene sim={sim} quality={quality} world={world} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} haptics={hapticsRef} debug={debug} />
       </Canvas>
 
+      {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
       <div className="runner-hud" aria-live="polite">
         <span className="runner-score">{score} m</span>
         <span className="runner-orbs" aria-label={`${orbs} orbs`}><i aria-hidden="true" />{orbs}</span>
@@ -375,6 +386,7 @@ export default function RunnerGame() {
           <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('worlds')}>Worlds</button>
           <p className="runner-hint">Auto play: watch Aisha run by herself</p>
+          {hapticsSupported() && <button className="runner-btn runner-btn-alt runner-haptics" role="switch" aria-checked={haptics} onClick={() => setHaptics((v) => !v)}>Vibration: {haptics ? 'on' : 'off'}</button>}
           <ul className="runner-help">
             <li><b>← →</b> / A D · swipe: change lane</li>
             <li><b>↑</b> / W / Space · swipe up: jump</li>

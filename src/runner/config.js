@@ -89,3 +89,7 @@ export const HOLE = { breakFrom: 24, breakTo: 20 }
 // World 06's gusts: no obstacle row is placed in [at - pre, at + post] metres around a gust line. post = 16 m is 1.28 s at top speed:
 // more than the generator's worst case for getting from any lane to any other after the shove (0.93 s), plus a margin.
 export const GUST = { pre: 3, post: 16, warn: 80, glide: 1 }
+
+// Near miss (cosmetic feedback only: it never changes scoring or collisions): an obstacle that passed Aisha with less than this
+// many metres of clearance, sideways or above/below, without touching her.
+export const NEAR_MISS = 0.3
