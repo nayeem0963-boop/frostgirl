@@ -112,7 +112,7 @@ test('holes appear only in the worlds that turn them on', () => {
       const s = createSim(seed, themeFor(id)); startRun(s, seed)
       for (let i = 0; i < 60 * 130; i++) { s.phase = 'running'; update(s, 1 / 60); for (const o of s.obstacles) if (o.active && o.kind === 'hole') seen++ }
     }
-    if (id === '04') assert.ok(seen > 50, `World 04 has holes (${seen})`)
+    if (id === '04' || id === '07') assert.ok(seen > 50, `World 04 has holes (${seen})`)
     else assert.equal(seen, 0, `world ${id} must have none`)
   }
   assert.equal(themeFor('04').hazards.hole, true); assert.equal(themeFor('03').hazards.hole, undefined)

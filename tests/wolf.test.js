@@ -70,7 +70,7 @@ test('wolves appear only in worlds that turn them on; World 01 never sees one', 
       const s = createSim(seed, w); startRun(s, seed)
       for (let i = 0; i < 60 * 140; i++) { s.phase = 'running'; update(s, 1 / 60); for (const o of s.obstacles) if (o.active && o.kind === 'wolf') seen++ }
     }
-    if (id === '02') assert.ok(seen > 50, `World 02 has wolves (${seen})`)
+    if (id === '02' || id === '07') assert.ok(seen > 50, `World 02 has wolves (${seen})`)
     else assert.equal(seen, 0, `world ${id} must have none`)
   }
   assert.equal(themeFor('02').hazards.wolf, true); assert.deepEqual(themeFor('01').hazards, {})

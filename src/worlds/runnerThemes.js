@@ -116,7 +116,16 @@ export const runnerThemes = {
     ground: { base: '#f4f8ff', speck: [185, 205, 240] },
     trail: { base: '#d9e5f6', speck: [165, 185, 225], shade: [140, 165, 215], divider: [105, 140, 210], rail: [90, 125, 205] },
     backdrop: { crop: 0.42 },
-    patternWeights: { zigzag: 1.4, archWall: 1.3, wallRidge: 1.3 },
+    // The finale: every signature hazard of Worlds 02-06 at once, each less often than in its own world
+    hazards: { wolf: true, shard: true, hole: true, gust: true, mist: true },
+    gust: { startAt: 200, period: 260, jitter: 40 }, // gusts every ~260 m
+    mist: { startAt: 900, period: 700, length: 110, ramp: 30, near: 10, far: 50, color: '#fff3dc' }, // two short banks (900-1010, 1600-1710 m); the last 290 m are clear
+    patternWeights: {
+      zigzag: 1.2, archWall: 1.2, wallRidge: 1.2,
+      wolf: 0.7, wolfWall: 0.5, wolfPair: 0.4,
+      shard: 0.7, shardWall: 0.5, shardPair: 0.4,
+      hole: 0.7, holeWall: 0.5, holePair: 0.4,
+    },
     finishDistance: 2000,
   }),
 }
