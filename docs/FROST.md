@@ -1,3 +1,39 @@
+# Frost — Phase 6.2: sound (synthesized)
+
+The game had no audio. There are no sound files in the repository and none could be supplied, so **everything is synthesized with
+Web Audio at run time**: nothing to download, works offline, and easy to replace with recordings later (each sound is one recipe
+in `src/runner/audio/sounds.js`). **I cannot hear anything from here**; what I could do is measure the output (see below). Whether it
+sounds good is for you to judge, and the recipes are plain numbers meant to be tuned by ear.
+
+- **What plays** (`audio/sounds.js` rules, `audio/engine.js` Web Audio): a start chime; footsteps that follow the run animation (one
+  per 1.26 m, left and right differ); a puff for a jump and a thump for the landing; a swish for a lane change (panned to the
+  side) and a duck; orb chimes that climb a pentatonic ladder for a chain (a pause starts again from the bottom); a whoosh for a
+  near miss and for a gust; a crash for a hit; a four-note chime for a finished level; a soft wind bed that gets muffled in the
+  mist. **Hazard warnings** play once when the telegraph starts: a growl for the wolf (from its side), a falling whistle for a
+  crystal, an ice-crack for a hole.
+- **Rules:** audio is created only inside a tap or key press (browsers refuse before one) and is suspended while the tab is hidden.
+  **Sound is off for Auto play** and whenever the player turned it off: Settings > Sound, or the **M** key, remembered with the other
+  settings. At most 14 sounds at once (the crash always gets through). A gentle limiter sits on the sum.
+- **Nothing in the simulation changed.** Sound listens to the same events as vibration.
+- **Levels were tuned from a measurement.** `node scripts/audio-report.mjs` renders every sound offline in headless Chromium (through the
+  real engine, master gain and limiter) and reports peak and loudness. The first version was very quiet (peaks 0.05-0.2, `lane` and
+  `duck` would have been inaudible, and the crash was not even the loudest sound), so each sound got a trim (`LEVEL` in `sounds.js`).
+  Now: every sound peaks between 0.04 and 0.8, the crash is the loudest (0.61), footsteps are the quietest of the effects (0.043),
+  and the worst moment (crash + three chimes + footsteps + wind + gust + near miss together) peaks at 0.83, under the limiter.
+  This checks audibility and distortion only, not taste.
+
+## Tests (run here)
+- `npm test`: 254/254 (new `tests/sounds.test.js`, 10 tests of the rules; `tests/audio-engine.test.js`, 9 tests with a fake Web Audio:
+  nothing before a gesture, no Web Audio handled, off / Auto play / suspended are silent, every event plays, orb chains climb,
+  voice cap, footsteps, hazard warnings once, every recipe builds).
+- `node scripts/audio-report.mjs`: the loudness table above; no silent, clipping or NaN sound.
+- `ONLY=sound` 16/16 in headless Chrome with real Web Audio and the engine's own counters: no audio before the first tap, a tap unlocks
+  it, start chime and footsteps, jump and landing, lane swish, two orb chimes, a crystal warning once, `M` mutes and unmutes (and
+  is saved), nothing plays while muted, the crash, no page errors; Auto play makes no sound; a saved "off" is silent from the first frame.
+- Regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound` 211/211 (whole levels in the browser; the Retry/Restart button inside the viewport at 1534x630 and on phones).
+- **Not verified:** how it sounds (taste, balance against music-less silence), loudness on real phone speakers and headphones,
+  iOS Safari specifics (audio starts on the first tap by design). Real recordings or a music loop are the natural next step if you want them.
+
 # Frost — Phase 6.1: quality tiers and a frame-time readout
 
 I cannot test on a phone from here, so this PR builds the two things that make a real-device test possible and safe, and it does

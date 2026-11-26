@@ -1072,6 +1072,68 @@ if (want('quality')) {
     await ctx.close() }
 }
 
+if (want('sound')) {
+  const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, '&world=01&unlock=all')
+  const st = () => S(page, () => { const a = window.__frostRunner.debug.audio; return { started: a.started, supported: a.supported, played: { ...a.stats.played } } })
+  const total = (x) => Object.values(x.played).reduce((n, v) => n + v, 0)
+  const stored = () => S(page, () => JSON.parse(localStorage.getItem('frost-runner-settings-v1') ?? '{}'))
+  check('Web Audio is available in this browser', (await st()).supported)
+  check('no audio context before the first tap or key press', (await st()).started === false)
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(200)
+  check('Settings offers a Sound switch (on by default)', (await page.getByTestId('sound-switch').innerText()) === 'Sound: on')
+  await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
+  check('the tap on a button unlocked audio (a user gesture)', (await st()).started === true)
+  await page.keyboard.press('Enter'); await sleep(1500); await clear(page)
+  let a = await st()
+  check('the run start chime and the footsteps play', a.played.start === 1 && (a.played.step ?? 0) >= 2, JSON.stringify(a.played))
+  const before = (await st()).played.jump ?? 0
+  await page.keyboard.press('Space'); await sleep(400)
+  check('a jump makes a jump sound (and the landing a thump)', ((await st()).played.jump ?? 0) === before + 1 && ((await st()).played.land ?? 0) >= 1, JSON.stringify((await st()).played))
+  await page.keyboard.press('ArrowLeft'); await sleep(300)
+  check('a lane change makes a swish', ((await st()).played.lane ?? 0) >= 1)
+  // an orb: climbing chimes for a chain
+  await S(page, () => { const s = window.__frostRunner.sim; for (let i = 0; i < 2; i++) { const o = s.orbs.find((q) => !q.active); Object.assign(o, { active: true, taken: false, takenT: 0, x: s.x, y: 0.9, dist: s.dist + 6 + i * 2.2, id: 9800 + i }) } })
+  for (let i = 0; i < 200 && ((await st()).played.orb ?? 0) < 2; i++) await realSleep(50)
+  check('picking up two orbs plays two chimes', ((await st()).played.orb ?? 0) >= 2, JSON.stringify((await st()).played))
+  // a hazard warning when a crystal comes into range
+  await S(page, () => { const s = window.__frostRunner.sim; const o = s.obstacles.find((q) => !q.active); Object.assign(o, { active: true, kind: 'shard', lane: s.lane === 2 ? 0 : 2, side: 0, x: s.lane === 2 ? -2.2 : 2.2, dist: s.dist + 30, id: 9900 }) })
+  for (let i = 0; i < 100 && ((await st()).played.shard ?? 0) < 1; i++) await realSleep(50)
+  check('a crystal coming into range gives its warning sound, once', ((await st()).played.shard ?? 0) === 1)
+  // M mutes and unmutes
+  await clear(page)
+  const t0 = total(await st())
+  await page.keyboard.press('KeyM'); await sleep(300)
+  check('M turns sound off and saves it', (await stored()).sound === false)
+  await page.keyboard.press('Space'); await sleep(900)
+  check('while muted nothing is played', total(await st()) === t0, `${t0} -> ${total(await st())}`)
+  await page.keyboard.press('KeyM'); await sleep(300)
+  check('M turns it back on', (await stored()).sound === true)
+  // the crash
+  const h0 = (await st()).played.hit ?? 0
+  await clear(page); await place(page, 'wall', (await sim(page)).lane, 8) // in her own lane, wherever she is now
+  for (let i = 0; i < 200 && ((await st()).played.hit ?? 0) === h0; i++) await realSleep(50)
+  check('the crash makes its sound', ((await st()).played.hit ?? 0) === h0 + 1)
+  check('no page errors (sound)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('sound')) {
+  // Auto play is silent, and a saved "off" is respected from the first frame
+  const { ctx, page } = await open({ width: 800, height: 450 })
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(3000)
+  const t = await S(page, () => Object.values(window.__frostRunner.debug.audio.stats.played).reduce((n, v) => n + v, 0))
+  check('Auto play makes no sound', t === 0, `${t} sounds`)
+  await ctx.close()
+  const off = await browser.newContext({ viewport: { width: 800, height: 450 } })
+  await off.addInitScript(() => { try { localStorage.setItem('frost-runner-settings-v1', JSON.stringify({ sound: false })) } catch { /* ignore */ } })
+  const p2 = await off.newPage(); active = p2
+  await p2.goto(`${base}/?game=frost&debug`); await p2.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+  await p2.keyboard.press('Enter'); await sleep(1500); await p2.keyboard.press('Space'); await sleep(600)
+  const t2 = await S(p2, () => Object.values(window.__frostRunner.debug.audio.stats.played).reduce((n, v) => n + v, 0))
+  check('a saved "sound off" is silent from the first frame', t2 === 0, `${t2} sounds`)
+  await off.close()
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

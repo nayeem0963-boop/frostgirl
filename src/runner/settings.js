@@ -6,6 +6,7 @@ export const SETTINGS_KEY = 'frost-runner-settings-v1'
 
 export const DEFAULT_SETTINGS = {
   haptics: true, // vibration on pickups, gusts, near misses, hits (phones that support it)
+  sound: true, // synthesized sound effects and a soft wind bed (never in Auto play); starts only after the first tap or key press
   motion: 'auto', // 'auto' follows the system "reduce motion" preference | 'on' | 'off': no camera shake, no flashes
   quality: 'auto', // 'auto' picks from the screen and pointer | 'low' | 'high'
   leftHanded: false, // the pause button moves to the left edge, away from a right thumb that is swiping
@@ -22,7 +23,7 @@ const store = () => (typeof localStorage === 'undefined' ? null : localStorage)
 export function sanitize(raw) {
   const out = { ...DEFAULT_SETTINGS }
   if (!raw || typeof raw !== 'object') return out
-  for (const k of ['haptics', 'leftHanded', 'highContrast', 'hintSeen']) if (typeof raw[k] === 'boolean') out[k] = raw[k]
+  for (const k of ['haptics', 'sound', 'leftHanded', 'highContrast', 'hintSeen']) if (typeof raw[k] === 'boolean') out[k] = raw[k]
   for (const k of ['motion', 'quality', 'difficulty']) if (CHOICES[k].includes(raw[k])) out[k] = raw[k]
   return out
 }
