@@ -1,3 +1,52 @@
+# Frost — Phase 6.8: smaller models (mesh compression)
+
+The remaining big downloads were the four runtime models. Their textures were already WebP, but their **geometry and animation data was not
+compressed at all** (spruces 2.0 MB of 4.5, Aisha 2.5 MB of 3.0, massif 1.6 MB of 3.8, wolf 0.7 MB of 1.5). This applies mesh compression
+(`EXT_meshopt_compression`, decoded by the browser loader with no extra code) and **does not touch any texture**, so nothing about how a model
+looks is re-encoded. That also keeps World 01's look (a standing rule) as it was.
+
+| model | before | after |
+| --- | --- | --- |
+| aisha.glb | 3.03 MB | 1.50 MB (-51%) |
+| alpine-spruces.glb | 4.54 MB | 3.51 MB (-23%) |
+| mountain-massif.glb | 3.80 MB | 2.83 MB (-26%) |
+| wolf.glb | 1.46 MB | 1.14 MB (-22%) |
+| **total** | **12.83 MB** | **8.98 MB (-30%)** |
+
+First visit over the wire, measured with `scripts/net-report.mjs` on a build of master and of this branch:
+
+| page | before | after |
+| --- | --- | --- |
+| runner, World 01 | 12.71 MB | 9.17 MB (-28%) |
+| runner, World 02 (and 03-07 alike) | 10.66 MB | 7.78 MB (-27%) |
+| original game | 4.26 MB | 2.73 MB (-36%) |
+
+(Together with 6.7, World 02 went from 14.44 MB to 7.78 MB.)
+
+- **Is it lossless? Almost, and I measured the difference.** The geometry is already quantized and is compressed exactly. Animation rotations
+  are stored with a 16-bit quaternion filter. Compared keyframe by keyframe over all 12,087 rotations in Aisha's eight clips: the largest change
+  in the actual rotation is **0.83 degrees** at one keyframe (a rotation and its negative are the same rotation, and 1,735 are stored with the
+  opposite sign), and translations differ by under 0.1% of the rig's size; the wolf's largest change is 0.0001. Structure is identical before and
+  after: skin and joint counts (24 and 41), every clip and its duration, triangle counts, materials and textures.
+- **Looks the same:** rendered World 01, World 02, the original game and the expedition on the old and new builds. World 01 differs by 0.59 of 255
+  on average (the animated pose and falling snow); the original game 0.66. No page errors anywhere. (World 02 and the expedition differ more only
+  because scenery scrolls and the camera moves between two runs started at slightly different moments; in the expedition the new build even shows
+  the distant mountains that had not yet arrived in the old one at the same moment, because the file is smaller.)
+- **Reproducible and guarded:** `npm run models:compress` (`scripts/compress-models.mjs`, idempotent) compresses every .glb in the folder. If the
+  models are ever regenerated from sources with `scripts/build-expedition-assets.mjs`, run it afterwards. A test fails if a model is not
+  compressed, if the models exceed 9.5 MB in total, or if Aisha's or the wolf's clips and joints go missing.
+- **Cost not measured:** decoding is done in the browser by a small WebAssembly decoder and takes a moment per model on load; I have not measured
+  it on a real phone (it should be small next to the download saved, but that is not a measurement).
+- **Still not touched:** the textures (spruces 2.5 MB, massif 2.3 MB as 2048-pixel WebP). Lowering them would change how the forest and World 01's
+  mountains look, which is a judgement for you.
+
+## Tests (run here)
+- `npm test`: 273/273 (new `tests/models.test.js`, 4 tests).
+- Full regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,challenge,outfit` on the compressed models: 235 of 236 passed. The one
+  failure was my own too-tight pixel threshold in the outfit check (at most 8 blue pixels left on Ember; it got 11, against about 730-990 on Frost, because the
+  animation lands on a very slightly different pose); I changed it to a relative bound (under 6% of Frost's) and re-ran the outfit section twice, 14/14 both times.
+  Everything else passed, including whole levels in the browser, the sound checks, and the Retry/Restart button at 1534x630 and on phones.
+
 # Frost — Phase 6.6 (part 3): Aisha's outfits
 
 The last part of plan item 6.6. Cosmetic only, as the standing rule says: every outfit has the same body, collision box and physics;
