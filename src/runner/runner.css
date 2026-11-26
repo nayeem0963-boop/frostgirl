@@ -124,7 +124,8 @@
 /* 6.4 settings sheet, first-run hint, left-handed layout, and the in-game reduce-motion switch (same effect as the system media query) */
 .runner-settings { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; gap: 8px; justify-items: stretch; }
 .runner-settings .runner-btn { width: min(78vw, 320px); }
-@media (max-height: 520px) { .runner-settings { grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 8px; } .runner-settings .runner-btn { width: 100%; font-size: 14px; padding: 6px 12px; } }
+@media (max-height: 520px) and (min-width: 700px) { .runner-settings { grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 4px 0 8px; } .runner-settings .runner-btn { width: 100%; font-size: 13px; padding: 6px 10px; } }
+@media (max-height: 520px) and (max-width: 699px) { .runner-settings { grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 8px; } .runner-settings .runner-btn { width: 100%; font-size: 14px; padding: 6px 12px; } }
 .runner-tip {
   position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); margin: 0; max-width: 92vw; text-align: center;
   padding: 8px 16px; border-radius: 18px; font-size: clamp(13px, 3.4vw, 16px); font-weight: 600; color: #fff; pointer-events: none;

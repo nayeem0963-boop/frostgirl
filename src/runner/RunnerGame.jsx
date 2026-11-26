@@ -26,6 +26,7 @@ import { attachInput } from './sim/input.js'
 import { buzz, hapticsSupported } from './feel.js'
 import { createAudio } from './audio/engine.js'
 import { CHALLENGES, evaluateChallenge, progressLabel } from './challenges.js'
+import { nextLocked, nextOutfit, usableOutfit } from './outfits.js'
 import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, showHint } from './settings.js'
 import { TIERS, TIER_DATA, FrameMeter, activeTier, loadTier, nextTierDown, saveTier, snowCount, startTier } from './quality.js'
 import { createBot, botStep } from './sim/bot.js'
@@ -197,7 +198,7 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, audio, debug }) {
+function Scene({ sim, quality, world, endless, outfit, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, audio, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -218,7 +219,7 @@ function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose
       <Snowfall count={snowCount(t, quality)} paused={false} color={t.snow.color} />
       <Suspense fallback={null}>
         <RunnerForest sim={sim} quality={quality} />
-        <RunnerAisha sim={sim} debug={debug} />
+        <RunnerAisha sim={sim} debug={debug} outfit={outfit} />
         <Orbs sim={sim} />
         {t.hazards?.wolf && <Wolves sim={sim} />}
         <Ready />
@@ -279,6 +280,7 @@ export default function RunnerGame() {
   // Quality tier: 'auto' starts from what the screen suggests (or lower, if this device was measured to need it) and steps down when
   // frames are slow (quality.js); a manual Graphics choice, or ?tier=high|low|min in the URL, is exact. ?fps shows a live readout.
   const flags = useMemo(() => { const p = new URLSearchParams(window.location.search); const t = p.get('tier'); return { fps: p.has('fps'), tier: TIERS.includes(t) ? t : null, adapt: p.has('adapt'), debug: p.has('debug') } }, [])
+  const outfit = useMemo(() => usableOutfit(settings.outfit, progress, unlockAll), [settings.outfit, progress, unlockAll]) // locked outfits fall back to Frost
   const [autoTier, setAutoTier] = useState(() => startTier(detectQuality(), loadTier()))
   const quality = flags.tier ?? activeTier(settings.quality, autoTier)
   const meter = useMemo(() => new FrameMeter(), [])
@@ -423,7 +425,7 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={glConfig}
       >
-        <Scene sim={sim} quality={quality} world={world} endless={endless} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} endless={endless} outfit={outfit} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
       </Canvas>
 
       {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
@@ -498,6 +500,7 @@ export default function RunnerGame() {
           <ul className="runner-settings">
             {hapticsSupported() && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.haptics} onClick={() => change({ haptics: !settings.haptics })}>Vibration: {settings.haptics ? 'on' : 'off'}</button></li>}
             {audio.supported && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.sound} data-testid="sound-switch" onClick={() => change({ sound: !settings.sound })}>Sound: {settings.sound ? 'on' : 'off'}</button></li>}
+            <li><button className="runner-btn runner-btn-alt" data-testid="outfit" onClick={() => change({ outfit: nextOutfit(outfit.id, progress, unlockAll).id })} title={nextLocked(progress, unlockAll) ? `Next outfit: ${nextLocked(progress, unlockAll).outfit.name} at ${nextLocked(progress, unlockAll).text}` : 'All outfits unlocked'}>Outfit: {outfit.name}{nextLocked(progress, unlockAll) ? ` · next: ${nextLocked(progress, unlockAll).text.replace(/ \(you have \d+\)/, '')}` : ''}</button></li>
             <li><button className="runner-btn runner-btn-alt" data-testid="difficulty" onClick={() => change({ difficulty: nextChoice('difficulty', settings.difficulty) })}>Difficulty: {settings.difficulty}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ motion: nextChoice('motion', settings.motion) })}>Reduce motion: {settings.motion}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}{settings.quality === 'auto' ? ` (${quality})` : ''}</button></li>
