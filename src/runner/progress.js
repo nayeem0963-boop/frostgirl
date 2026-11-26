@@ -23,6 +23,7 @@ export function sanitize(raw) {
   for (const [id, w] of Object.entries(raw.worlds)) {
     if (!/^\d{2}$/.test(id) || !w || typeof w !== 'object') continue
     p.worlds[id] = { best: num(w.best), bestOrbs: num(w.bestOrbs), stars: Math.min(3, num(w.stars)), completed: w.completed === true }
+    if (num(w.bestEndless) > 0) p.worlds[id].bestEndless = num(w.bestEndless) // Endless mode best distance (only present once one is set)
   }
   return p
 }
@@ -57,8 +58,19 @@ export function recordRun(progress, worldId, run) {
     stars: run.completed ? Math.max(cur.stars, Math.min(3, num(run.stars))) : cur.stars,
     completed: cur.completed || run.completed === true,
   }
+  if (cur.bestEndless) next.bestEndless = cur.bestEndless
   return { ...progress, worlds: { ...progress.worlds, [worldId]: next } }
 }
+
+/** An Endless run ended: only the Endless best moves. Level bests, stars and unlocks are never touched. Returns a NEW progress object. */
+export function recordEndless(progress, worldId, run) {
+  const cur = progress.worlds[worldId] ?? blank()
+  const bestEndless = Math.max(cur.bestEndless ?? 0, num(run.distance))
+  return { ...progress, worlds: { ...progress.worlds, [worldId]: bestEndless > 0 ? { ...cur, bestEndless } : cur } }
+}
+
+/** Endless opens for a world once it has been finished (or with ?unlock=all). */
+export const endlessOpen = (progress, worldId, unlockAll = false) => unlockAll || progress.worlds[worldId]?.completed === true
 
 /** World 01 is always open; completing world N opens world N+1. */
 export function isUnlocked(progress, worldId, worldIds) {

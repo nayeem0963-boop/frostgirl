@@ -1,3 +1,33 @@
+# Frost — Phase 6.6 (part 1): Endless mode
+
+Plan item 6.6 lists three things (Endless mode, per-world star goals, cosmetic Aisha outfits) and says each is its own PR.
+This PR is **Endless mode only**; the other two are not started.
+
+- **What it is:** a world's own obstacles and hazards with no finish line. A crash ends the run. It opens for a world once that
+  world is finished (or with `?unlock=all`). Start screen: "Endless" (shows your best).
+- **Sim:** `startRun(sim, seed, { endless: true })`. The generator has no finish limit and the level-complete check is
+  skipped. Mist banks and gust lines are periodic, so they carry on past the old finish line. The selected difficulty
+  applies. Speed stays at the normal top speed; the generator stays at full difficulty (nothing else escalates yet).
+- **Saving:** `bestEndless` per world in the progress save. `recordEndless` only moves that number: level bests, stars,
+  completion and unlocks are never touched, and old saves have no such field. Scores stay on the device.
+- **UI:** an "Endless" badge replaces the level progress bar, the finish gate is not drawn, the game-over panel says
+  "Endless run" with the Endless best, Restart repeats the mode.
+- **New "Menu" button** on the game-over and level-complete panels. There was no way back to the start screen (Worlds,
+  Settings, Endless) after a run without reloading; Menu returns there and the next "Start run" is a normal level again.
+- Auto play is unchanged (levels only).
+
+## Tests (run here)
+- `npm test`: 219/219 (new `tests/endless.test.js`, 8 tests: the bot runs past the finish line on all 7 worlds without a
+  completion and with obstacles beyond it; a normal level still ends at the line; mist and gusts continue; difficulty
+  applies; Endless saves only its own best; save round trip and old saves; when Endless opens; the bot survives 5 km on
+  Hard in Worlds 01, 04 and 07). A separate probe of 8 km on Hard in all 7 worlds (2 seeds each) also ended with the bot still running.
+- `ONLY=endless` 13/13 in headless Chrome (offered when open, badge and no progress bar, past the finish line the run goes on,
+  "Endless run" panel, only the Endless best saved, Restart repeats, Menu returns, Start run is a level again, fresh save does
+  not offer it, Restart and Menu inside the viewport at 390x844 and 844x390).
+- Regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless` 172/172 (whole levels in the browser, the Retry/Restart button inside the viewport at 1534x630 and on phones). Existing e2e selectors that assumed a single game-over button were updated for the new Menu button.
+- Not verified: how Endless feels over a long session (the speed stops rising at the normal top speed, so it may feel flat after
+  a few minutes: an escalation curve is the obvious next step if so), real-device play.
+
 # Frost — Phase 6.5: difficulty levels and a balance report
 
 The plan asked for human play-test notes first. There are none yet, so this PR does the parts that do not need them: it adds the
