@@ -729,6 +729,47 @@ if (want('phone')) {
   await phone({ width: 844, height: 390 }, 'phone-landscape')
 }
 
+if (want('gust')) {
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=06&unlock=all')
+  await page.keyboard.press('Enter'); await sleep(400)
+  // park the runner in the middle lane just before the first gust line with a clear road
+  const g = await S(page, () => { const s = window.__frostRunner.sim; for (const o of s.obstacles) o.active = false; s.gen.lastPos = 1e9; const gu = s.world.gust; const at = gu.startAt + (s.nextGust ?? 0) * gu.period; return { start: gu.startAt, n: s.nextGust } })
+  check('World 06 has gusts and the first is still ahead', g.start > 0 && g.n === 0, JSON.stringify(g))
+  await S(page, () => { const s = window.__frostRunner.sim; s.dist = s.world.gust.startAt - 60; s.lane = 1; s.x = 0 })
+  await sleep(600)
+  await page.screenshot({ path: `${out}/26-gust-warning.png` })
+  const warn = await S(page, () => { const s = window.__frostRunner.sim; return { gusts: s.nextGust, lane: s.lane } })
+  check('before the line nothing has pushed Aisha', warn.gusts === 0 && warn.lane === 1, JSON.stringify(warn))
+  await S(page, () => { const s = window.__frostRunner.sim; s.dist = s.world.gust.startAt + 40 - 4; for (const o of s.obstacles) o.active = false; s.gen.lastPos = 1e9 })
+  let got = null
+  for (let i = 0; i < 400 && !got; i++) { const r = await S(page, () => { const s = window.__frostRunner.sim; return { gusts: s.nextGust, lane: s.lane, ph: s.phase } }); if (r.gusts > 0) got = r; else await realSleep(30) }
+  await sleep(500)
+  await page.screenshot({ path: `${out}/27-gust-push.png` })
+  check('crossing the line shoves Aisha one lane sideways', !!got && got.lane !== 1, JSON.stringify(got))
+  check('a gust never ends the run by itself', got && got.ph === 'running')
+  check('no page errors (gust)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('gust')) {
+  const { ctx, page, errors } = await open({ width: 640, height: 360 }, false, '&world=06&unlock=all')
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(400)
+  let last = { t: 0, ph: 'running', n: 0 }
+  for (let i = 0; i < 12000; i++) {
+    last = await S(page, () => { const s = window.__frostRunner.sim; return { t: s.time, ph: s.phase, n: s.nextGust } })
+    if (last.t >= 40 || last.ph !== 'running') break
+    await realSleep(60)
+  }
+  check('Auto play survives 40 s of World 06 with gusts', last.ph === 'running' && last.t >= 40, `t ${last.t.toFixed(1)} s, ${last.n} gusts crossed`)
+  check('Auto play really crossed gusts', last.n >= 1, `${last.n}`)
+  check('no page errors (World 06 Auto play)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+  const w1 = await open({ width: 640, height: 360 }, false, '&world=01')
+  const none = await S(w1.page, () => !window.__frostRunner.sim.world.gust)
+  check('World 01 has no gusts', none)
+  await w1.ctx.close()
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

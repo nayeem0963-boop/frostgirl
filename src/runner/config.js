@@ -85,3 +85,7 @@ export const SHARD = { dropFrom: 34, landAt: 16, height: 18 }
 // World 04's cracking ice: a lane shows cracks from far away, breaks open into water between breakFrom and breakTo metres ahead of
 // Aisha (24 -> 20 m: 1.6 s of reaction even at top speed), and then it is a hole she must dodge or jump.
 export const HOLE = { breakFrom: 24, breakTo: 20 }
+
+// World 06's gusts: no obstacle row is placed in [at - pre, at + post] metres around a gust line. post = 16 m is 1.28 s at top speed:
+// more than the generator's worst case for getting from any lane to any other after the shove (0.93 s), plus a margin.
+export const GUST = { pre: 3, post: 16, warn: 80, glide: 1 }

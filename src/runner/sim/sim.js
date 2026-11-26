@@ -3,6 +3,7 @@
 import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD, HOLE } from '../config.js'
 import { starsFor } from '../progress.js'
 import { mistAt, fogAt, visionRange } from './mist.js'
+import { gustAt, avoidGust } from './gust.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
 
@@ -60,6 +61,7 @@ export function createSim(seed = 1, world = themeFor('01')) {
     orbs: Array.from({ length: ORBS.pool }, () => ({ active: false, taken: false, takenT: 0, x: 0, y: 0, dist: 0, id: 0 })),
     stars: 0, // set on completion: 1 to 3
     doneT: 0, // seconds since crossing the line
+    nextGust: 0, // index of the next gust that has not blown yet (World 06)
     mist: 0, // 0..1: how thick the mist is here (World 05); the renderer reads it for the fog
     vision: 1e9, // how far ahead things can be seen through the fog: the Auto play bot only reacts to what it can see
     orbCount: 0, // orbs collected this run
@@ -84,7 +86,7 @@ export function startRun(sim, seed = sim.seed + 1, { auto = false } = {}) {
   })
   for (const o of sim.obstacles) o.active = false
   for (const o of sim.orbs) { o.active = false; o.taken = false }
-  sim.orbCount = 0; sim.orbsSeen = 0; sim.stars = 0; sim.doneT = 0; sim.mist = 0; sim.vision = 1e9
+  sim.orbCount = 0; sim.orbsSeen = 0; sim.stars = 0; sim.doneT = 0; sim.mist = 0; sim.vision = 1e9; sim.nextGust = 0
   sim.events.length = 0
   emit(sim, 'start')
   fillObstacles(sim)
@@ -251,7 +253,8 @@ function fillObstacles(sim) {
     for (const { row, gap } of rows) {
       const prevRow = g.lastRow
       const prevPos = g.lastPos
-      const pos = prevPos + gap * speedAt(sim, prevPos)
+      let pos = prevPos + gap * speedAt(sim, prevPos)
+      if (sim.world.gust) pos = avoidGust(pos, sim.world.gust) // no row near a gust line: the shove can never push her into trouble
       if (pos > limit) { g.done = true; break } // the rest of the level is a clean run-in
       g.lastPos = pos
       place(sim, row, g.lastPos)
@@ -326,6 +329,15 @@ function stepOnce(sim, dt) {
   const move = sim.speed * dt
   sim.dist += move
   stepPlayer(sim, dt)
+  if (sim.world.gust) { // aurora gusts: crossing a gust line shoves her one lane (a gust blows once; at an edge lane it has nothing to push)
+    sim.nextGust = Math.max(sim.nextGust, 0)
+    for (let g = gustAt(sim.nextGust, sim.world.gust); g.at <= sim.dist; g = gustAt(sim.nextGust, sim.world.gust)) {
+      sim.nextGust++
+      const to = sim.lane + g.dir
+      if (to >= 0 && to <= 2) { sim.laneFrom = sim.x; sim.lane = to; sim.laneT = 0; sim.queued = null }
+      emit(sim, 'gust')
+    }
+  }
   if (sim.world.mist) { // the mist is a function of the distance run; the fog (and what the bot can see) follows it
     sim.mist = mistAt(sim.dist, sim.world.mist)
     sim.vision = visionRange(fogAt(sim.mist, sim.world.fog, sim.world.mist))
