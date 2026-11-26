@@ -1,3 +1,16 @@
+# Frost — Phase 6.9: an accurate README
+
+The README still described the early spiral prototype ("other playable worlds and audio are not implemented yet") and did not mention the runner
+at all, and its closing section said `?game=frost` was the expedition. It now opens with what the three addresses are, then describes the runner:
+the seven worlds and their hazards, controls, every URL flag (`world`, `unlock`, `debug`, `fps`, `tier`, `adapt`, `mode`), the saved-data keys, the
+commands and browser scripts (and that Playwright is not a project dependency), the standing rules, where things are, and the open decisions and
+known gaps. The original prototype's notes are kept intact under their own heading.
+
+`tests/readme.test.js` (7 tests) keeps it true: the world table must match the world data, every documented flag must be read by the code, every npm
+script, script file and e2e section it names must exist, the storage keys and controls must match the code, and the stale claims must stay gone.
+I checked the test is not vacuous by breaking a distance and a flag name in the README: both were caught. No runtime code changed, so no browser
+regression run was needed; `npm test` is 280/280 and lint is clean.
+
 # Frost — Phase 6.8: smaller models (mesh compression)
 
 The remaining big downloads were the four runtime models. Their textures were already WebP, but their **geometry and animation data was not
