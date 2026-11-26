@@ -1254,6 +1254,57 @@ if (want('outfit')) {
     await ctx.close() }
 }
 
+if (want('music')) {
+  const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, '&world=01&unlock=all')
+  const m = () => S(page, () => ({ ...window.__frostRunner.debug.audio.stats.music }))
+  const stored = () => S(page, () => JSON.parse(localStorage.getItem('frost-runner-settings-v1') ?? '{}'))
+  const waitBars = async (n, ms = 30000) => { const end = Date.now() + ms; while (Date.now() < end) { if ((await m()).bars >= n) return true; await realSleep(200) } return false }
+  check('no music before the first tap or key press', (await m()).bars === 0)
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(300)
+  check('Settings has a Music switch, on by default', (await page.getByTestId('music-switch').innerText()) === 'Music: on')
+  check('the first tap unlocked audio and the calm music began on the start screen', await waitBars(1) && (await m()).notes > 3, JSON.stringify(await m()))
+  await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
+  await page.keyboard.press('Enter'); await sleep(600); await clear(page)
+  const b1 = (await m()).bars
+  check('the music keeps going, bar after bar, while the run goes on', await waitBars(b1 + 1) && (await sim(page)).phase === 'running', `${b1} -> ${(await m()).bars}`)
+  // the music follows the world
+  await S(page, () => window.__frostRunner.selectWorld('04')); await sleep(400)
+  check('the music retunes when the world changes (World 04)', (await m()).world === '04')
+  await page.keyboard.press('Enter'); await sleep(600); await clear(page)
+  // Music off: no more bars, saved; Sound stays on (effects still play)
+  await page.keyboard.press('Escape'); await sleep(300) // pause
+  const bp = (await m()).bars
+  await sleep(4500)
+  check('while paused the music schedules nothing more', (await m()).bars === bp, `${bp} -> ${(await m()).bars}`)
+  await page.keyboard.press('Escape'); await sleep(300) // resume
+  await S(page, () => window.__frostRunner.reset()); await sleep(500)
+  await page.getByRole('button', { name: 'Settings' }).click(); await sleep(250)
+  await page.getByTestId('music-switch').click(); await sleep(250)
+  check('the Music switch turns off and is saved', (await page.getByTestId('music-switch').innerText()) === 'Music: off' && (await stored()).music === false)
+  const b2 = (await m()).bars
+  await sleep(5000)
+  check('with Music off no further bars are scheduled', (await m()).bars === b2, `${b2} -> ${(await m()).bars}`)
+  const playedBefore = await S(page, () => Object.values(window.__frostRunner.debug.audio.stats.played).reduce((n, v) => n + v, 0))
+  await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
+  await page.keyboard.press('Enter'); await sleep(600); await clear(page); await page.keyboard.press('Space'); await sleep(900)
+  check('with Music off the effects still play', (await S(page, () => Object.values(window.__frostRunner.debug.audio.stats.played).reduce((n, v) => n + v, 0))) > playedBefore)
+  check('no page errors (music)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('music')) {
+  // Auto play has no music, and "M" silences the music along with everything else
+  const { ctx, page } = await open({ width: 800, height: 450 })
+  await page.getByRole('button', { name: 'Auto play' }).click(); await sleep(5000)
+  check('Auto play plays no music', (await S(page, () => window.__frostRunner.debug.audio.stats.music.bars)) === 0)
+  await ctx.close()
+  const c2 = await open({ width: 800, height: 450 })
+  await c2.page.keyboard.press('KeyM'); await sleep(400) // Sound off before anything starts
+  await c2.page.keyboard.press('Enter'); await sleep(5000)
+  check('with Sound off (M) there is no music either', (await S(c2.page, () => window.__frostRunner.debug.audio.stats.music.bars)) === 0)
+  await c2.ctx.close()
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

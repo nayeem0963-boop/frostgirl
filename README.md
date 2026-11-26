@@ -28,8 +28,8 @@ once a world is finished it also offers Endless mode. **Auto play** (a watch-onl
 Outfits for Aisha (colour variants) unlock from stars and badges. Everything is cosmetic or progress: there is no shop, no purchase and no
 online score.
 
-**Controls.** Arrow keys or A / D: change lane. Up, W or Space: jump. Down or S: duck. Esc or P: pause. M: sound on/off. Enter, Space or R:
-start or restart. On touch screens, swipe left, right, up or down. Settings (vibration, sound, difficulty, outfit, reduce motion, graphics,
+**Controls.** Arrow keys or A / D: change lane. Up, W or Space: jump. Down or S: duck. Esc or P: pause. M: sound and music on/off. Enter, Space or R:
+start or restart. On touch screens, swipe left, right, up or down. Settings (vibration, sound, music, difficulty, outfit, reduce motion, graphics,
 left-handed layout, high-contrast obstacles) are on the start screen.
 
 ## URL flags
@@ -63,7 +63,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 | Script | What it does |
 | --- | --- |
-| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,challenge,outfit,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
+| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
 | `node scripts/runner-perf.mjs <url> --budget [--world=NN]` | draw calls and triangles against the mobile budget (<= 350k triangles, <= 30 draw calls) |
 | `node scripts/net-report.mjs <built-dir> [query]` | bytes over the wire for a first visit, a second visit and an offline reload |
 | `node scripts/difficulty-report.mjs [seeds]` | the Auto play bot over every world and difficulty: density, tightness, finish rate (no browser) |
@@ -90,7 +90,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 - **Stars and difficulty:** stars and bests are recorded the same on every difficulty level. Options: leave it, cap Easy at 2 stars, or keep separate bests per level.
 - **Challenge goals and outfit requirements** are first guesses, not validated against a human player.
-- **No music yet** (only effects and a wind bed). **Textures** of the spruces and the World 01 massif are 2048-pixel WebP; lowering them would change how World 01 looks.
+- **Music is synthesized and unheard by me** (a calm generative loop per world; see Phase 7.0 in docs/FROST.md). **Textures** of the spruces and the World 01 massif are 2048-pixel WebP; lowering them would change how World 01 looks.
 - **Outfits and the new settings** apply in the runner only, not in the original game.
 - **Real devices:** no frame-rate or load-time measurement on a phone yet. Open the game with `&fps` on one and play a minute.
 

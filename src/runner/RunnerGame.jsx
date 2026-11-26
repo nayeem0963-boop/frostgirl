@@ -286,6 +286,8 @@ export default function RunnerGame() {
   const meter = useMemo(() => new FrameMeter(), [])
   const audio = useMemo(() => createAudio(), []) // synthesized sound (audio/engine.js): created in a user gesture, silent in Auto play
   useEffect(() => { audio.setEnabled(settings.sound) }, [audio, settings.sound])
+  useEffect(() => { audio.setMusicEnabled(settings.music) }, [audio, settings.music])
+  useEffect(() => { audio.setWorld(world.id) }, [audio, world.id]) // the music changes key and tempo with the world
   const adaptive = useRef(false)
   const qualityRef = useRef(quality)
   const adaptiveOn = settings.quality === 'auto' && !flags.tier && nextTierDown(quality) !== null && (!flags.debug || flags.adapt) // nothing lower than min to step to; ?debug runs (tests, measurements) keep their tier unless ?adapt is added
@@ -499,6 +501,7 @@ export default function RunnerGame() {
           <h2>Settings</h2>
           <ul className="runner-settings">
             {hapticsSupported() && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.haptics} onClick={() => change({ haptics: !settings.haptics })}>Vibration: {settings.haptics ? 'on' : 'off'}</button></li>}
+            {audio.supported && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.music} data-testid="music-switch" onClick={() => change({ music: !settings.music })}>Music: {settings.music ? 'on' : 'off'}</button></li>}
             {audio.supported && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.sound} data-testid="sound-switch" onClick={() => change({ sound: !settings.sound })}>Sound: {settings.sound ? 'on' : 'off'}</button></li>}
             <li><button className="runner-btn runner-btn-alt" data-testid="outfit" onClick={() => change({ outfit: nextOutfit(outfit.id, progress, unlockAll).id })} title={nextLocked(progress, unlockAll) ? `Next outfit: ${nextLocked(progress, unlockAll).outfit.name} at ${nextLocked(progress, unlockAll).text}` : 'All outfits unlocked'}>Outfit: {outfit.name}{nextLocked(progress, unlockAll) ? ` · next: ${nextLocked(progress, unlockAll).text.replace(/ \(you have \d+\)/, '')}` : ''}</button></li>
             <li><button className="runner-btn runner-btn-alt" data-testid="difficulty" onClick={() => change({ difficulty: nextChoice('difficulty', settings.difficulty) })}>Difficulty: {settings.difficulty}</button></li>
