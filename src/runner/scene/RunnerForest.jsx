@@ -8,13 +8,13 @@ import { useMemo } from 'react'
 import { DoubleSide, Group, InstancedMesh, Object3D } from 'three'
 import { ASSETS } from '../../expedition/assets.js'
 import { SLOTS_PER_SIDE, VARIANTS, groundY, slotAhead, treeAt } from './scenery.js'
+import { TIER_DATA } from '../quality.js'
 
-// metres ahead of Aisha: LOD0 (~8k tris) up to NEAR, LOD1 (~1.5k) up to MID, LOD2 (~200) beyond. Phones get tighter ranges.
-const LODS = { high: [24, 80], low: [14, 55] }
+// metres ahead of Aisha: LOD0 (~8k tris) up to NEAR, LOD1 (~1.5k) up to MID, LOD2 (~200) beyond. Slower tiers get tighter ranges (quality.js).
 const BEHIND_CAMERA = 9 // the camera sits ~6 m behind Aisha: trees further back are never drawn
 
 export function RunnerForest({ sim, quality }) {
-  const [LOD_NEAR, LOD_MID] = LODS[quality] ?? LODS.high
+  const [LOD_NEAR, LOD_MID] = (TIER_DATA[quality] ?? TIER_DATA.high).lods
   const { scene } = useGLTF(ASSETS.spruces)
 
   const forest = useMemo(() => {

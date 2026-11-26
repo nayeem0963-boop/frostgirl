@@ -47,6 +47,7 @@ export const nextChoice = (key, value) => { const c = CHOICES[key]; return c[(c.
 export const resolveReducedMotion = (settings, systemPrefersReduced) => settings.motion === 'on' || (settings.motion === 'auto' && !!systemPrefersReduced)
 
 /** Render quality: the player's choice, else what the device suggests. */
+// (kept for reference and tests: the game now uses quality.js `activeTier` with an adaptive tier for 'auto')
 export const resolveQuality = (settings, detected) => (settings.quality === 'auto' ? detected : settings.quality)
 
 /** The first-run hint shows until the first jump, or after this many metres of running (about 15 s; it never hangs around for good). */
