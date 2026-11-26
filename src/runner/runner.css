@@ -137,3 +137,9 @@
 .runner-root[data-reduce-motion="true"] .runner-tip { animation: none; }
 .runner-root[data-reduce-motion="true"] .runner-close { animation-name: runner-close-fade; }
 @keyframes runner-close-fade { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* 6.6 Endless mode badge (replaces the level progress bar) */
+.runner-mode {
+  position: absolute; left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); padding: 4px 12px; border-radius: 14px; pointer-events: none;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #fff; background: rgba(20, 50, 90, 0.6); backdrop-filter: blur(4px);
+}

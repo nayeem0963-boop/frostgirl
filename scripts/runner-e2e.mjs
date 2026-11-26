@@ -195,7 +195,7 @@ if (want('desktop')) {
   // restart via button
   await place(page, 'wall', 1, 12); await sleep(1800)
   await page.waitForSelector('[data-screen="gameover"] .runner-btn')
-  await page.locator('[data-screen="gameover"] .runner-btn').click()
+  await page.locator('[data-screen="gameover"] .runner-btn:not(.runner-menu)').click()
   await sleep(600)
   s = await sim(page); check('restart works (button)', s.phase === 'running')
 
@@ -719,7 +719,7 @@ async function phone(viewport, tag) {
   // the overlay element is full-screen by design (its lower part is transparent): measure where its CONTENT ends
   const lay = await S(page, () => { const r = document.querySelector('[data-screen="gameover"]'); const kids = [...r.children].filter((k) => getComputedStyle(k).display !== 'none'); const last = kids[kids.length - 1].getBoundingClientRect(); const wide = Math.max(...kids.map((k) => k.getBoundingClientRect().right)); const c = document.querySelector('canvas').getBoundingClientRect(); return { bottom: last.bottom, right: wide, h: c.height, w: c.width } })
   check(`[${tag}] game-over panel leaves the lower scene visible`, tag.includes('portrait') ? lay.bottom < lay.h * 0.62 : lay.right < lay.w * 0.5, `content ends at y ${Math.round(lay.bottom)}/${lay.h}, x ${Math.round(lay.right)}/${lay.w}`)
-  await page.locator('[data-screen="gameover"] .runner-btn').tap(); await sleep(600)
+  await page.locator('[data-screen="gameover"] .runner-btn:not(.runner-menu)').tap(); await sleep(600)
   s = await sim(page); check(`[${tag}] tap Restart`, s.phase === 'running')
   check(`[${tag}] no page errors`, errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
   await ctx.close()
@@ -910,12 +910,69 @@ if (want('settings')) {
   }
 }
 
+if (want('endless')) {
+  const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, '&world=01&unlock=all')
+  const prog = () => S(page, () => JSON.parse(localStorage.getItem('frost-runner-progress-v1') ?? '{}'))
+  check('Endless is offered on the start screen (world open)', (await page.getByTestId('endless-start').count()) === 1)
+  await page.getByTestId('endless-start').click(); await sleep(500)
+  check('Endless run: the mode badge shows and the level progress bar is gone', (await page.getByTestId('endless-badge').count()) === 1 && (await page.locator('.runner-progress').count()) === 0)
+  check('sim.endless is on', await S(page, () => window.__frostRunner.sim.endless === true))
+  await page.screenshot({ path: `${out}/33-endless.png` })
+  // run past the old finish line: no level-complete, the run just goes on
+  await clear(page)
+  await S(page, () => { const s = window.__frostRunner.sim; s.dist = s.world.finishDistance - 30 })
+  let past = await sim(page)
+  for (let i = 0; i < 400 && past.phase === 'running' && past.dist < 1530; i++) { await realSleep(50); past = await sim(page) } // slow software rendering: wait until she is really past the line
+  await clear(page); await sleep(400); past = await sim(page)
+  check('past the finish line the run goes on (no level complete)', past.phase === 'running' && past.dist > 1500, `${past.phase} ${past.dist.toFixed(0)} m`)
+  // crash: the game-over panel is the Endless one, only the Endless best is saved
+  await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
+  await page.waitForSelector('[data-screen="gameover"] .runner-btn', { timeout: 20000 })
+  check('the game-over panel says Endless run', /Endless run/.test(await page.locator('[data-screen="gameover"]').innerText()))
+  const p1 = (await prog()).worlds?.['01']
+  check('only the Endless best was saved (no level best, no stars)', !!p1 && p1.bestEndless > 1400 && p1.best === 0 && p1.stars === 0 && p1.completed === false, JSON.stringify(p1))
+  await page.screenshot({ path: `${out}/34-endless-over.png` })
+  // Restart repeats the mode; Menu returns to the start screen, where a level run is a level run again
+  await sleep(500); await page.locator('[data-screen="gameover"] .runner-btn').first().click(); await sleep(500)
+  check('Restart repeats Endless', await S(page, () => window.__frostRunner.sim.endless === true && window.__frostRunner.sim.phase === 'running'))
+  await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
+  await page.waitForSelector('[data-screen="gameover"] .runner-menu', { timeout: 20000 })
+  await page.locator('[data-screen="gameover"] .runner-menu').click(); await sleep(500)
+  check('Menu returns to the start screen', (await page.locator('[data-screen="start"]').count()) === 1)
+  await page.getByRole('button', { name: 'Start run' }).click(); await sleep(500)
+  check('Start run after Endless is a normal level (progress bar back, sim.endless off)', (await page.locator('.runner-progress').count()) === 1 && (await S(page, () => window.__frostRunner.sim.endless === false)))
+  check('no page errors (endless)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('endless')) {
+  // Endless is locked until the world is finished (no unlock=all): not offered on a fresh save
+  const { ctx, page } = await open({ width: 800, height: 450 })
+  check('a fresh save does not offer Endless yet', (await page.getByTestId('endless-start').count()) === 0)
+  await ctx.close()
+}
+
+if (want('endless')) {
+  // the Menu button fits on phones, on the game-over and the level-complete panel
+  for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
+    const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
+    const page = await ctx.newPage(); active = page
+    await page.goto(`${base}/?game=frost&debug&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.getByRole('button', { name: 'Start run' }).tap(); await sleep(400); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
+    await page.waitForSelector('[data-screen="gameover"] .runner-menu', { timeout: 20000 }); await sleep(300)
+    const r = await page.locator('[data-screen="gameover"] button').evaluateAll((els) => els.map((e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right } }))
+    check(`[phone-${tag}] Restart and Menu are both inside the viewport`, r.length >= 2 && r.every((b) => b.top >= 0 && b.bottom <= vp.height && b.left >= 0 && b.right <= vp.width), JSON.stringify(r.map((b) => Math.round(b.bottom))))
+    await page.screenshot({ path: `${out}/35-over-menu-${tag}.png` })
+    await ctx.close()
+  }
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })
   await page.keyboard.press('Enter'); await sleep(300); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
   await page.waitForSelector('[data-screen="gameover"] .runner-btn', { timeout: 20000 })
-  const box = await page.locator('[data-screen="gameover"] .runner-btn').boundingBox()
+  const box = await page.locator('[data-screen="gameover"] .runner-btn:not(.runner-menu)').boundingBox()
   check('Restart button inside viewport at 1534x630', !!box && box.y >= 0 && box.y + box.height <= 630)
   await ctx.close()
 }

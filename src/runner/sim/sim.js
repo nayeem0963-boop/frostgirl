@@ -68,15 +68,17 @@ export function createSim(seed = 1, world = themeFor('01')) {
     orbCount: 0, // orbs collected this run
     orbsSeen: 0, // orbs spawned this run
     difficulty: DEFAULT_DIFFICULTY,
+    endless: false,
     auto: false, // Auto play: watch-only, the bot drives (see sim/bot.js)
     driver: null, // called before every fixed step in Auto play
     nextId: 1,
   }
 }
 
-export function startRun(sim, seed = sim.seed + 1, { auto = false, difficulty = DEFAULT_DIFFICULTY } = {}) {
+export function startRun(sim, seed = sim.seed + 1, { auto = false, difficulty = DEFAULT_DIFFICULTY, endless = false } = {}) {
   sim.seed = seed
   sim.auto = auto
+  sim.endless = endless // Endless: the world's obstacles forever, no finish line (a crash ends the run); stars and level bests are not touched
   sim.difficulty = difficulty // 'easy' | 'normal' | 'hard' (sim/difficulty.js): only the generator reads it
   if (!auto) sim.driver = null
   sim.rand = mulberry32(seed)
@@ -260,7 +262,7 @@ function placeOrbs(sim, prevRow, prevPos, row, pos) {
 
 function fillObstacles(sim) {
   const g = sim.gen
-  const limit = sim.world.finishDistance - LEVEL.clearance // nothing is placed closer to the finish line than this
+  const limit = sim.endless ? Infinity : sim.world.finishDistance - LEVEL.clearance // nothing is placed closer to the finish line than this (Endless has none)
   while (g.lastPos - sim.dist < RUN.spawnAhead && !g.done) {
     const rows = nextPattern(g, sim.rand, difficulty(sim), weightsFor(sim.world.patternWeights, sim.difficulty), modeOf(sim.difficulty).gap)
     for (const { row, gap } of rows) {
@@ -375,7 +377,7 @@ function stepOnce(sim, dt) {
       if (clearance(sim, o, ducked) < NEAR_MISS) emit(sim, 'nearMiss')
     }
   }
-  if (sim.dist >= sim.world.finishDistance) {
+  if (!sim.endless && sim.dist >= sim.world.finishDistance) {
     sim.phase = 'complete'; sim.anim = 'run'; sim.doneT = 0; sim.queued = null
     sim.stars = starsFor(sim.orbCount, sim.orbsSeen)
     emit(sim, 'complete')

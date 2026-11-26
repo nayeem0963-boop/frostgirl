@@ -14,7 +14,7 @@ import { Wolves } from './scene/Wolves.jsx'
 import { Gusts } from './scene/Gusts.jsx'
 import { fogAt } from './sim/mist.js'
 import { pickWorld, unlockAllRequested } from './worlds.js'
-import { loadProgress, saveProgress, recordRun, nextWorldId, describeWorlds } from './progress.js'
+import { loadProgress, saveProgress, recordRun, recordEndless, endlessOpen, nextWorldId, describeWorlds } from './progress.js'
 import { worldIds } from '../worlds/runnerThemes.js'
 import { worlds as allWorlds } from '../worlds/config.js'
 import { RunnerForest } from './scene/RunnerForest.jsx'
@@ -174,7 +174,7 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, debug }) {
+function Scene({ sim, quality, world, endless, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -189,7 +189,7 @@ function Scene({ sim, quality, world, onPhase, onScore, onOrbs, onClose, onJump,
       <Sky colors={t.sky} />
       <Ground sim={sim} theme={t} />
       <Obstacles sim={sim} highContrast={highContrast} />
-      <FinishGate sim={sim} />
+      {!endless && <FinishGate sim={sim} />}
       <Shadow sim={sim} />
       <HitBurst sim={sim} />
       <Snowfall count={t.snow.count[quality] ?? t.snow.count.high} paused={false} color={t.snow.color} />
@@ -232,6 +232,8 @@ export default function RunnerGame() {
   const [paused, setPaused] = useState(false)
   const [score, setScore] = useState(0)
   const [orbs, setOrbs] = useState(0)
+  const [endless, setEndless] = useState(false) // Endless mode: this world's obstacles with no finish line (opens once the world is finished)
+  const endlessRef = useRef(false)
   const [close, setClose] = useState(0) // counts 'Close!' pops (a near miss: an obstacle passed within a hand's width)
   const [settings, setSettings] = useState(loadSettings) // player settings (settings.js): vibration, motion, quality, left-handed, high contrast, hint
   const change = useCallback((patch) => setSettings((v) => ({ ...v, ...patch })), [])
@@ -254,6 +256,8 @@ export default function RunnerGame() {
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
   const hitAt = useRef(0)
+  const progressRef = useRef(progress)
+  useEffect(() => { progressRef.current = progress }, [progress])
   const [showOver, setShowOver] = useState(false)
   const saved = progress.worlds[world.id] ?? { best: 0, bestOrbs: 0, stars: 0, completed: false }
   const finish = world.runner.finishDistance
@@ -266,8 +270,18 @@ export default function RunnerGame() {
     if (s.phase === 'running') return
     if ((s.phase === 'gameover' || s.phase === 'complete') && performance.now() - hitAt.current < (s.phase === 'complete' ? DONE_DELAY : OVER_DELAY)) return // no accidental instant restart (the panel is not up yet)
     clearTimeout(autoTimer.current)
-    startRun(s, (Math.random() * 1e9) | 0, { difficulty: difficultyRef.current })
-    setAuto(false); setScore(0); setOrbs(0)
+    startRun(s, (Math.random() * 1e9) | 0, { difficulty: difficultyRef.current, endless: endlessRef.current })
+    setAuto(false); setScore(0); setOrbs(0); setEndless(endlessRef.current)
+  }, [])
+  const startLevel = useCallback(() => { endlessRef.current = false; start() }, [start])
+  const startEndless = useCallback(() => { endlessRef.current = true; start() }, [start])
+  const toMenu = useCallback(() => { // back to the start screen from a game-over / level-complete panel
+    const s = sim.current
+    if (s.phase === 'running') return
+    endlessRef.current = false; setEndless(false)
+    resetToReady(s)
+    s.auto = false; s.driver = null
+    setScore(0); setOrbs(0); setOutcome(null); setShowOver(false); setScreen('start')
   }, [])
   // Auto play: the same game, driven by sim/bot.js through command(); player input is ignored until Stop / Esc.
   const startAuto = useCallback(() => {
@@ -277,6 +291,7 @@ export default function RunnerGame() {
     bot.current = createBot()
     startRun(s, (Math.random() * 1e9) | 0, { auto: true, difficulty: difficultyRef.current })
     s.driver = (q) => botStep(q, bot.current)
+    endlessRef.current = false; setEndless(false)
     setAuto(true); setScore(0); setOrbs(0)
   }, [])
   const exitAuto = useCallback(() => {
@@ -317,8 +332,9 @@ export default function RunnerGame() {
     } else if (p === 'gameover' || p === 'complete') {
       const done = p === 'complete'
       hitAt.current = performance.now()
-      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen, hit: s.hit?.kind })
-      setProgress((prev) => { const next = recordRun(prev, world.id, { distance: s.dist, orbs: s.orbCount, completed: done, stars: s.stars }); saveProgress(next); return next })
+      const prevEndless = progressRef.current.worlds[world.id]?.bestEndless ?? 0
+      setOutcome({ completed: done, stars: s.stars, distance: Math.floor(s.dist), orbs: s.orbCount, seen: s.orbsSeen, hit: s.hit?.kind, endless: s.endless, newBest: s.endless && Math.floor(s.dist) > prevEndless })
+      setProgress((prev) => { const next = s.endless ? recordEndless(prev, world.id, { distance: s.dist }) : recordRun(prev, world.id, { distance: s.dist, orbs: s.orbCount, completed: done, stars: s.stars }); saveProgress(next); return next })
       overTimer.current = setTimeout(() => setShowOver(true), done ? DONE_DELAY : OVER_DELAY) // let the impact / the celebration play out first
     } else {
       setShowOver(false)
@@ -363,7 +379,7 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={{ antialias: quality !== 'low', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }}
       >
-        <Scene sim={sim} quality={quality} world={world} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
+        <Scene sim={sim} quality={quality} world={world} endless={endless} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
       </Canvas>
 
       {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
@@ -376,7 +392,8 @@ export default function RunnerGame() {
         {phase === 'running' && !auto && <button className="runner-pause" onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶' : 'Ⅱ'}</button>}
       </div>
 
-      {phase !== 'ready' && !showOver && (
+      {phase !== 'ready' && !showOver && endless && !auto && <span className="runner-mode" data-testid="endless-badge">Endless</span>}
+      {phase !== 'ready' && !showOver && !endless && (
         <div className="runner-progress" role="progressbar" aria-label="Level progress" aria-valuemin={0} aria-valuemax={finish} aria-valuenow={Math.min(score, finish)}>
           <i style={{ width: `${Math.min(100, (score / finish) * 100)}%` }} />
           <span>{finish} m</span>
@@ -390,7 +407,8 @@ export default function RunnerGame() {
           <h1>Frost</h1>
           <p className="runner-tag">Run the snowy trail with Aisha</p>
           <p className="runner-level" data-testid="level-info">{world.name} · {finish} m{settings.difficulty !== 'normal' && <> · {settings.difficulty}</>}{saved.stars > 0 && <> · <Stars n={saved.stars} /></>}{saved.best > 0 && saved.stars === 0 && <> · best {saved.best} m</>}</p>
-          <button className="runner-btn" onClick={start} autoFocus>Start run</button>
+          <button className="runner-btn" onClick={startLevel} autoFocus>Start run</button>
+          {endlessOpen(progress, world.id, unlockAll) && <button className="runner-btn runner-btn-alt" onClick={startEndless} data-testid="endless-start">Endless{saved.bestEndless > 0 ? ` · best ${saved.bestEndless} m` : ''}</button>}
           <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('worlds')}>Worlds</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('settings')}>Settings</button>
@@ -459,10 +477,11 @@ export default function RunnerGame() {
           <h2>{outcome.hit === 'wolf' ? 'The wolf got you' : outcome.hit === 'shard' ? 'Crushed by a crystal' : outcome.hit === 'hole' ? 'You fell through the ice' : outcome.hit === 'ridge' ? 'You tripped on the fallen pine' : 'You hit the ice'}</h2>
           <p className="runner-label">Distance</p>
           <p className="runner-final">{outcome.distance}<small> m</small></p>
-          <p className="runner-tag">of {finish} m · {Math.floor((outcome.distance / finish) * 100)}%</p>
-          <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} {outcome.orbs === 1 ? 'orb' : 'orbs'}{saved.bestOrbs > 0 && outcome.orbs >= saved.bestOrbs ? ' · best!' : ''}</p>
-          <p className="runner-tag">{saved.best > 0 && outcome.distance >= saved.best ? 'New best!' : `Best ${saved.best} m`}</p>
+          <p className="runner-tag">{outcome.endless ? 'Endless run' : `of ${finish} m · ${Math.floor((outcome.distance / finish) * 100)}%`}</p>
+          <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} {outcome.orbs === 1 ? 'orb' : 'orbs'}{!outcome.endless && saved.bestOrbs > 0 && outcome.orbs >= saved.bestOrbs ? ' · best!' : ''}</p>
+          <p className="runner-tag">{outcome.endless ? (outcome.newBest ? 'New best!' : `Best ${saved.bestEndless ?? 0} m`) : (saved.best > 0 && outcome.distance >= saved.best ? 'New best!' : `Best ${saved.best} m`)}</p>
           <button className="runner-btn" onClick={start} autoFocus>Restart</button>
+          <button className="runner-btn runner-btn-alt runner-menu" onClick={toMenu}>Menu</button>
           <p className="runner-hint">Enter · Space · R</p>
         </div>
       )}
@@ -473,7 +492,8 @@ export default function RunnerGame() {
           <p className="runner-stars" aria-label={`${outcome.stars} of 3 stars`}><Stars n={outcome.stars} big /></p>
           <p className="runner-orbs-final"><i aria-hidden="true" />{outcome.orbs} / {outcome.seen} orbs</p>
           <p className="runner-tag">{outcome.distance} m · best {saved.stars}★</p>
-          <button className="runner-btn" onClick={start} autoFocus>Play again</button>
+          <button className="runner-btn" onClick={startLevel} autoFocus>Play again</button>
+          <button className="runner-btn runner-btn-alt runner-menu" onClick={toMenu}>Menu</button>
           {nextWorldId(world.id, worldIds) && <button className="runner-btn runner-btn-alt runner-next" onClick={() => selectWorld(nextWorldId(world.id, worldIds))}>Next world</button>}
           <p className="runner-hint">Enter · Space · R</p>
         </div>
