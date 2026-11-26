@@ -4,6 +4,7 @@ import { NEAR_MISS, LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHAR
 import { starsFor } from '../progress.js'
 import { mistAt, fogAt, visionRange } from './mist.js'
 import { gustAt, avoidGust } from './gust.js'
+import { DEFAULT_DIFFICULTY, modeOf, weightsFor } from './difficulty.js'
 import { nextPattern, sig, openLanes } from './patterns.js'
 import { themeFor } from '../../worlds/runnerThemes.js'
 
@@ -66,15 +67,17 @@ export function createSim(seed = 1, world = themeFor('01')) {
     vision: 1e9, // how far ahead things can be seen through the fog: the Auto play bot only reacts to what it can see
     orbCount: 0, // orbs collected this run
     orbsSeen: 0, // orbs spawned this run
+    difficulty: DEFAULT_DIFFICULTY,
     auto: false, // Auto play: watch-only, the bot drives (see sim/bot.js)
     driver: null, // called before every fixed step in Auto play
     nextId: 1,
   }
 }
 
-export function startRun(sim, seed = sim.seed + 1, { auto = false } = {}) {
+export function startRun(sim, seed = sim.seed + 1, { auto = false, difficulty = DEFAULT_DIFFICULTY } = {}) {
   sim.seed = seed
   sim.auto = auto
+  sim.difficulty = difficulty // 'easy' | 'normal' | 'hard' (sim/difficulty.js): only the generator reads it
   if (!auto) sim.driver = null
   sim.rand = mulberry32(seed)
   Object.assign(sim, {
@@ -191,7 +194,7 @@ function standBlocked(sim) {
 }
 
 // ---- spawner -----------------------------------------------------------------
-const difficulty = (sim) => Math.min(1, sim.time / (sim.world.difficultySeconds ?? DIFFICULTY_SECONDS))
+const difficulty = (sim) => Math.min(1, sim.time / ((sim.world.difficultySeconds ?? DIFFICULTY_SECONDS) * modeOf(sim.difficulty).ramp))
 const speedAt = (sim, pos) => Math.min(RUN.maxSpeed, sim.speed + (RUN.accel * Math.max(0, pos - sim.dist)) / Math.max(sim.speed, 1))
 
 /** How far a cracking ice patch has broken open: 0 = cracked but solid, 1 = open water (breakFrom -> breakTo metres ahead). */
@@ -259,7 +262,7 @@ function fillObstacles(sim) {
   const g = sim.gen
   const limit = sim.world.finishDistance - LEVEL.clearance // nothing is placed closer to the finish line than this
   while (g.lastPos - sim.dist < RUN.spawnAhead && !g.done) {
-    const rows = nextPattern(g, sim.rand, difficulty(sim), sim.world.patternWeights)
+    const rows = nextPattern(g, sim.rand, difficulty(sim), weightsFor(sim.world.patternWeights, sim.difficulty), modeOf(sim.difficulty).gap)
     for (const { row, gap } of rows) {
       const prevRow = g.lastRow
       const prevPos = g.lastPos

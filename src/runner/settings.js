@@ -10,10 +10,11 @@ export const DEFAULT_SETTINGS = {
   quality: 'auto', // 'auto' picks from the screen and pointer | 'low' | 'high'
   leftHanded: false, // the pause button moves to the left edge, away from a right thumb that is swiping
   highContrast: false, // warm amber glow on obstacles so they stand out from snow and ice for every kind of colour vision
+  difficulty: 'normal', // 'easy' | 'normal' | 'hard': how often and how tightly obstacles come (sim/difficulty.js); never the physics
   hintSeen: false, // the first-run controls hint has been dismissed
 }
 
-export const CHOICES = { motion: ['auto', 'on', 'off'], quality: ['auto', 'low', 'high'] }
+export const CHOICES = { motion: ['auto', 'on', 'off'], quality: ['auto', 'low', 'high'], difficulty: ['easy', 'normal', 'hard'] }
 
 const store = () => (typeof localStorage === 'undefined' ? null : localStorage)
 
@@ -22,7 +23,7 @@ export function sanitize(raw) {
   const out = { ...DEFAULT_SETTINGS }
   if (!raw || typeof raw !== 'object') return out
   for (const k of ['haptics', 'leftHanded', 'highContrast', 'hintSeen']) if (typeof raw[k] === 'boolean') out[k] = raw[k]
-  for (const k of ['motion', 'quality']) if (CHOICES[k].includes(raw[k])) out[k] = raw[k]
+  for (const k of ['motion', 'quality', 'difficulty']) if (CHOICES[k].includes(raw[k])) out[k] = raw[k]
   return out
 }
 

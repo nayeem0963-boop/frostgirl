@@ -238,7 +238,8 @@ export default function RunnerGame() {
   const hapticsRef = useRef(settings.haptics)
   const reduceMotion = resolveReducedMotion(settings, SYSTEM_REDUCED_MOTION)
   const reduceRef = useRef(reduceMotion)
-  useEffect(() => { hapticsRef.current = settings.haptics; reduceRef.current = reduceMotion; saveSettings(settings) }, [settings, reduceMotion])
+  const difficultyRef = useRef(settings.difficulty)
+  useEffect(() => { hapticsRef.current = settings.haptics; reduceRef.current = reduceMotion; difficultyRef.current = settings.difficulty; saveSettings(settings) }, [settings, reduceMotion])
   const onJump = useCallback(() => change({ hintSeen: true }), [change])
   const onClose = useCallback(() => setClose((n) => n + 1), [])
   const [outcome, setOutcome] = useState(null) // {completed, stars, distance, orbs, seen} of the run that just ended
@@ -265,7 +266,7 @@ export default function RunnerGame() {
     if (s.phase === 'running') return
     if ((s.phase === 'gameover' || s.phase === 'complete') && performance.now() - hitAt.current < (s.phase === 'complete' ? DONE_DELAY : OVER_DELAY)) return // no accidental instant restart (the panel is not up yet)
     clearTimeout(autoTimer.current)
-    startRun(s, (Math.random() * 1e9) | 0)
+    startRun(s, (Math.random() * 1e9) | 0, { difficulty: difficultyRef.current })
     setAuto(false); setScore(0); setOrbs(0)
   }, [])
   // Auto play: the same game, driven by sim/bot.js through command(); player input is ignored until Stop / Esc.
@@ -274,7 +275,7 @@ export default function RunnerGame() {
     if (s.phase === 'running' && !s.auto) return
     clearTimeout(autoTimer.current)
     bot.current = createBot()
-    startRun(s, (Math.random() * 1e9) | 0, { auto: true })
+    startRun(s, (Math.random() * 1e9) | 0, { auto: true, difficulty: difficultyRef.current })
     s.driver = (q) => botStep(q, bot.current)
     setAuto(true); setScore(0); setOrbs(0)
   }, [])
@@ -388,7 +389,7 @@ export default function RunnerGame() {
         <div className="runner-screen" data-screen="start">
           <h1>Frost</h1>
           <p className="runner-tag">Run the snowy trail with Aisha</p>
-          <p className="runner-level" data-testid="level-info">{world.name} · {finish} m{saved.stars > 0 && <> · <Stars n={saved.stars} /></>}{saved.best > 0 && saved.stars === 0 && <> · best {saved.best} m</>}</p>
+          <p className="runner-level" data-testid="level-info">{world.name} · {finish} m{settings.difficulty !== 'normal' && <> · {settings.difficulty}</>}{saved.stars > 0 && <> · <Stars n={saved.stars} /></>}{saved.best > 0 && saved.stars === 0 && <> · best {saved.best} m</>}</p>
           <button className="runner-btn" onClick={start} autoFocus>Start run</button>
           <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('worlds')}>Worlds</button>
@@ -431,6 +432,7 @@ export default function RunnerGame() {
           <h2>Settings</h2>
           <ul className="runner-settings">
             {hapticsSupported() && <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.haptics} onClick={() => change({ haptics: !settings.haptics })}>Vibration: {settings.haptics ? 'on' : 'off'}</button></li>}
+            <li><button className="runner-btn runner-btn-alt" data-testid="difficulty" onClick={() => change({ difficulty: nextChoice('difficulty', settings.difficulty) })}>Difficulty: {settings.difficulty}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ motion: nextChoice('motion', settings.motion) })}>Reduce motion: {settings.motion}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}</button></li>
             <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.leftHanded} onClick={() => change({ leftHanded: !settings.leftHanded })}>Left-handed layout: {settings.leftHanded ? 'on' : 'off'}</button></li>

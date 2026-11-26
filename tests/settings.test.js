@@ -6,19 +6,19 @@ import { HAPTICS_KEY } from '../src/runner/feel.js'
 const mem = (init = {}) => { const m = new Map(Object.entries(init)); return { m, getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) } }
 
 test('defaults: everything on its safe default, nothing hidden', () => {
-  assert.deepEqual(DEFAULT_SETTINGS, { haptics: true, motion: 'auto', quality: 'auto', leftHanded: false, highContrast: false, hintSeen: false })
+  assert.deepEqual(DEFAULT_SETTINGS, { haptics: true, motion: 'auto', quality: 'auto', leftHanded: false, highContrast: false, difficulty: 'normal', hintSeen: false })
   assert.deepEqual(loadSettings(mem()), DEFAULT_SETTINGS)
 })
 
 test('settings round-trip through storage', () => {
   const st = mem()
-  const s = { ...DEFAULT_SETTINGS, motion: 'on', quality: 'low', leftHanded: true, highContrast: true, haptics: false, hintSeen: true }
+  const s = { ...DEFAULT_SETTINGS, difficulty: 'hard', motion: 'on', quality: 'low', leftHanded: true, highContrast: true, haptics: false, hintSeen: true }
   saveSettings(s, st)
   assert.deepEqual(loadSettings(st), s)
 })
 
 test('bad or hand-edited saves fall back per field and never throw', () => {
-  assert.deepEqual(sanitize({ motion: 'sideways', quality: 5, leftHanded: 'yes', haptics: 0, extra: 1 }), DEFAULT_SETTINGS)
+  assert.deepEqual(sanitize({ difficulty: 'nightmare', motion: 'sideways', quality: 5, leftHanded: 'yes', haptics: 0, extra: 1 }), DEFAULT_SETTINGS)
   assert.equal(sanitize({ motion: 'off', leftHanded: true }).motion, 'off')
   assert.deepEqual(loadSettings(mem({ [SETTINGS_KEY]: '{oops' })), DEFAULT_SETTINGS)
   assert.deepEqual(sanitize(null), DEFAULT_SETTINGS)
