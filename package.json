@@ -10,7 +10,9 @@
     "test": "node --test",
     "test:e2e": "node scripts/runner-e2e.mjs http://127.0.0.1:4173",
     "test:budget": "node scripts/runner-perf.mjs http://127.0.0.1:4173 --budget",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "oxlint && node --test && vite build",
+    "test:net": "vite build --outDir /tmp/frost-net-dist --emptyOutDir && node scripts/net-report.mjs /tmp/frost-net-dist"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

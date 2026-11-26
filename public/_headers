@@ -1,0 +1,8 @@
+# Netlify response headers. Hashed build files never change under the same name, so browsers may keep them for a year.
+/assets/*.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/*.css
+  Cache-Control: public, max-age=31536000, immutable
+# The service worker itself must always be re-checked, or updates to it would be delayed.
+/sw.js
+  Cache-Control: no-cache

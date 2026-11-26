@@ -45,4 +45,6 @@ export function MountainMassif({ world }) {
   return <primitive object={object} />
 }
 
-useGLTF.preload(ASSETS.massif)
+// Not preloaded at import time any more: the runner imports this file too, and Worlds 02-07 (painted backdrop) never draw the massif.
+// The expedition and the runner's World 01 call this themselves.
+export const preloadMassif = () => useGLTF.preload(ASSETS.massif)

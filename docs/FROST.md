@@ -1,3 +1,44 @@
+# Frost — Phase 6.7: technical health (load size, caching, offline, checks)
+
+Measured with `node scripts/net-report.mjs <built-dir> [query]`: it serves a built folder itself (with ETags like a real static host)
+and counts every byte it sends for a cold visit, a warm visit and a reload with no connection, headless Chromium.
+
+| first visit (cold) | before (master) | after |
+| --- | --- | --- |
+| runner, World 02 (Worlds 03-07 load the same set, plus the wolf only in 02 and 07) | 14.44 MB | **10.65 MB** (-3.79 MB, -26%) |
+| runner, World 01 | 12.69 MB | 12.70 MB (unchanged: it needs the massif) |
+| original game | 4.26 MB | 4.26 MB (unchanged) |
+
+All six numbers were measured with the same script on a build of master and a build of this branch.
+
+- **No wasted 3.9 MB model.** `Distant.jsx` preloaded `mountain-massif.glb` the moment the runner's code loaded, so Worlds 02-07
+  downloaded a model they never draw (they use a painted backdrop). Now only World 01 and the expedition ask for it; switching to
+  World 01 in-page fetches it then (the scene keeps running; the mountains appear when it lands).
+- **Vendor chunks** (`vite.config.js`): `three` (716 kB, 186 kB gzip) and `react` (219 kB) are separate, long-lived files, so an app
+  change re-downloads only the small app chunks. The old 966 kB shared chunk is now 251 kB of app code plus those two.
+- **Service worker** (`public/sw.js`, production only): pages network-first (a new deploy is always picked up, the last copy is the
+  offline fallback), hashed JS/CSS cache-first, models and images stale-while-revalidate, everything else untouched; only OK
+  responses are cached; old cache versions are deleted. After a full visit the game reloads and plays with no connection
+  (checked in a browser, offline). A warm visit costs about 0 MB in this test because the host answers revalidations with 304; the
+  worker's real addition is offline play, not bandwidth.
+- **Headers** (`public/_headers`, Netlify): hashed JS/CSS `immutable` for a year, `sw.js` `no-cache`. I could not test these locally:
+  check the deploy preview's response headers.
+- **Checks:** `npm run check` (lint, unit tests, build) and a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs the
+  same three on every pull request and push to master. The browser e2e and budget scripts are **not** in CI: they need Playwright
+  with a software-GL Chromium, which is not a dependency of the project.
+- **Still big, not touched:** `alpine-spruces.glb` 4.5 MB and `aisha.glb` 3.0 MB are the two biggest downloads. Shrinking them
+  means re-compressing the models (texture size, quantization) and judging the look by eye; the original source files are not in the
+  repository. That is the next lever.
+
+## Tests (run here)
+- `npm test`: 225/225 (new `tests/sw.test.js`, 6 tests: which requests the worker touches, versioned cache cleanup, network-first
+  pages with offline fallback, cache-first hashed bundles, stale-while-revalidate media, failed/opaque responses never cached).
+- `ONLY=offline` 10/10 (World 02 does not download the massif, World 01 and the expedition still do, switching to World 01 loads
+  it with no page errors, the worker registers and controls the page, the game reloads with no connection and a run starts and
+  moves offline).
+- Full regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline` 182/182 (whole levels in the browser with the service worker active; the Retry/Restart button inside the viewport at 1534x630 and on phones).
+- Not verified: the Netlify headers, real-device load times, how much the spruces/Aisha models can be shrunk.
+
 # Frost — Phase 6.6 (part 1): Endless mode
 
 Plan item 6.6 lists three things (Endless mode, per-world star goals, cosmetic Aisha outfits) and says each is its own PR.

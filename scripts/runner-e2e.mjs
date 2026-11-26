@@ -967,6 +967,57 @@ if (want('endless')) {
   }
 }
 
+if (want('offline')) {
+  // what the runner downloads: the 3.9 MB mountain massif is only for World 01 (and the expedition); Worlds 02-07 use a painted backdrop
+  const seen = async (query, ready = '.runner-root[data-loaded="true"]') => {
+    const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, serviceWorkers: 'block' })
+    const page = await ctx.newPage(); active = page
+    const urls = []; const errors = []
+    page.on('request', (r) => urls.push(new URL(r.url()).pathname)); page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto(`${base}/?game=frost&debug${query}`); await page.waitForSelector(ready, { timeout: 180000 }); await realSleep(1500)
+    return { ctx, page, urls, errors }
+  }
+  const w2 = await seen('&world=02&unlock=all')
+  check('World 02 does not download the mountain massif', !w2.urls.some((u) => /mountain-massif\.glb$/.test(u)))
+  check('World 02 loads the wolf, its painting and the spruces', w2.urls.some((u) => /wolf\.glb$/.test(u)) && w2.urls.some((u) => /world-02.*\.webp$/.test(u)) && w2.urls.some((u) => /alpine-spruces\.glb$/.test(u)))
+  // switching in-page to World 01 fetches it on demand and the scene keeps running
+  await S(w2.page, () => window.__frostRunner.selectWorld('01')); await sleep(300)
+  for (let i = 0; i < 400 && !w2.urls.some((u) => /mountain-massif\.glb$/.test(u)); i++) await realSleep(50)
+  check('switching to World 01 in-page loads the massif on demand, with no page errors', w2.urls.some((u) => /mountain-massif\.glb$/.test(u)) && w2.errors.length === 0, w2.errors.slice(0, 2).join(' | '))
+  await w2.ctx.close()
+  const w1 = await seen('')
+  check('World 01 still downloads and draws the massif', w1.urls.some((u) => /mountain-massif\.glb$/.test(u)) && w1.errors.length === 0)
+  await w1.ctx.close()
+  const ex = await seen('&mode=expedition', 'canvas')
+  check('the expedition still preloads the massif', ex.urls.some((u) => /mountain-massif\.glb$/.test(u)))
+  await ex.ctx.close()
+}
+
+if (want('offline')) {
+  // the service worker: after a full visit the game reloads with no connection at all
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } })
+  const page = await ctx.newPage(); active = page
+  const errors = []; page.on('pageerror', (e) => errors.push(e.message))
+  const visit = async () => { await page.goto(`${base}/?game=frost&debug&world=02&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(1200) }
+  await visit()
+  const registered = await S(page, async () => { const r = await navigator.serviceWorker?.ready; return !!r?.active })
+  check('the service worker registers and activates (production build)', registered)
+  await visit() // the worker now controls the page: this visit fills its caches
+  await visit()
+  const controlled = await S(page, () => !!navigator.serviceWorker?.controller)
+  check('the page is controlled by the worker', controlled)
+  await ctx.setOffline(true)
+  let ok = true
+  try { await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 60000 }) } catch { ok = false }
+  check('with NO connection the game reloads and loads', ok)
+  if (ok) {
+    await page.keyboard.press('Enter'); await sleep(1200)
+    check('and it can be played offline (a run starts and moves)', (await sim(page)).phase === 'running' && (await sim(page)).dist > 0)
+  }
+  check('no page errors offline', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })
