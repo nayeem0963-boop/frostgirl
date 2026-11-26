@@ -1134,6 +1134,58 @@ if (want('sound')) {
   await off.close()
 }
 
+if (want('challenge')) {
+  const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, '&world=01&unlock=all')
+  const finishWith = (orbs, seen) => S(page, ([o, n]) => { const s = window.__frostRunner.sim; for (const q of s.obstacles) q.active = false; s.gen.lastPos = 1e9; s.dist = s.world.finishDistance - 30; s.orbCount = o; s.orbsSeen = n }, [orbs, seen])
+  const prog = () => S(page, () => JSON.parse(localStorage.getItem('frost-runner-progress-v1') ?? '{}').worlds?.['01'])
+  // a normal level: 95% of the orbs is World 01's challenge (90%)
+  await page.keyboard.press('Enter'); await sleep(400); await clear(page)
+  await finishWith(95, 100)
+  await page.waitForSelector('[data-screen="complete"]', { timeout: 90000 }); await sleep(400)
+  const line = page.getByTestId('challenge-result')
+  check('the level-complete panel shows the challenge, done', (await line.count()) === 1 && (await line.getAttribute('data-done')) === 'true' && /Collect 90% of the orbs/.test(await line.innerText()) && /done!/.test(await line.innerText()), await line.innerText())
+  check('the badge is saved with the world', (await prog())?.challenge === true, JSON.stringify(await prog()))
+  await page.screenshot({ path: `${out}/37-challenge-done.png` })
+  // another run that does not meet it: the line shows progress and the badge stays
+  await page.waitForTimeout(1600); await page.getByRole('button', { name: 'Play again' }).click(); await sleep(500); await clear(page)
+  await finishWith(40, 100)
+  await page.waitForSelector('[data-screen="complete"]', { timeout: 90000 }); await sleep(400)
+  check('a run that falls short shows its progress, not done', (await page.getByTestId('challenge-result').getAttribute('data-done')) === 'false' && /40% \/ 90%/.test(await page.getByTestId('challenge-result').innerText()), await page.getByTestId('challenge-result').innerText())
+  check('and the saved badge is kept', (await prog())?.challenge === true)
+  check('stars were not touched by the challenge (only the orb rule)', (await prog())?.stars >= 1)
+  // a crash never earns it, and Endless shows no challenge line
+  await page.waitForTimeout(1600); await page.getByRole('button', { name: 'Menu' }).click(); await sleep(500)
+  await page.getByTestId('endless-start').click(); await sleep(500); await clear(page)
+  await finishWith(100, 100); await sleep(1500)
+  check('an Endless run past the finish line shows no level challenge', (await sim(page)).phase === 'running' && (await page.getByTestId('challenge-result').count()) === 0)
+  // the world cards list every challenge, with its badge
+  await clear(page); await place(page, 'wall', (await sim(page)).lane, 8); await page.waitForSelector('[data-screen="gameover"] .runner-menu', { timeout: 20000 })
+  await sleep(600); await page.locator('[data-screen="gameover"] .runner-menu').click(); await sleep(400)
+  await page.getByRole('button', { name: 'Worlds' }).click(); await sleep(400)
+  const cards = await page.locator('.runner-card-ch').evaluateAll((els) => els.map((e) => ({ t: e.innerText, done: e.getAttribute('data-done') })))
+  check('every unlocked world card shows its challenge (7 of 7)', cards.length === 7, JSON.stringify(cards.map((c) => c.t)))
+  check("World 01's card shows its badge as done, the others as open", cards[0].done === 'true' && /^◆/.test(cards[0].t) && cards.slice(1).every((c) => c.done === 'false' && /^◇/.test(c.t)))
+  await page.screenshot({ path: `${out}/38-challenge-cards.png` })
+  check('no page errors (challenge)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
+  await ctx.close()
+}
+
+if (want('challenge')) {
+  // the result panel and the world list still fit on phones with the extra line
+  for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
+    const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
+    const page = await ctx.newPage(); active = page
+    await page.goto(`${base}/?game=frost&debug&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.getByRole('button', { name: 'Start run' }).tap(); await sleep(400); await clear(page)
+    await S(page, () => { const s = window.__frostRunner.sim; for (const q of s.obstacles) q.active = false; s.gen.lastPos = 1e9; s.dist = s.world.finishDistance - 30; s.orbCount = 95; s.orbsSeen = 100 })
+    await page.waitForSelector('[data-screen="complete"] .runner-menu', { timeout: 90000 }); await sleep(500)
+    const r = await page.locator('[data-screen="complete"] button, [data-testid="challenge-result"]').evaluateAll((els) => els.map((e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right } }))
+    check(`[phone-${tag}] the complete panel with its challenge line fits`, r.length >= 3 && r.every((b) => b.top >= 0 && b.bottom <= vp.height && b.left >= 0 && b.right <= vp.width), JSON.stringify(r.map((b) => Math.round(b.bottom))))
+    await page.screenshot({ path: `${out}/39-challenge-complete-${tag}.png` })
+    await ctx.close()
+  }
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

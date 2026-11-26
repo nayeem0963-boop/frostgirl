@@ -149,3 +149,9 @@
   position: absolute; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); padding: 3px 8px; border-radius: 6px; pointer-events: none;
   font: 12px/1.3 ui-monospace, Menlo, Consolas, monospace; color: #cfffd8; background: rgba(0, 0, 0, 0.6);
 }
+
+/* 6.6b world challenge: a line on the world card and on the level-complete panel */
+.runner-card-ch { display: block; margin-top: 2px; font-size: 12px; opacity: 0.92; }
+.runner-card-ch[data-done="true"] { font-weight: 700; }
+.runner-challenge { font-size: clamp(13px, 3.4vw, 16px); margin: 2px 0 0; }
+.runner-challenge[data-done="true"] { font-weight: 700; }

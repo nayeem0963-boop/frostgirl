@@ -24,6 +24,7 @@ export function sanitize(raw) {
     if (!/^\d{2}$/.test(id) || !w || typeof w !== 'object') continue
     p.worlds[id] = { best: num(w.best), bestOrbs: num(w.bestOrbs), stars: Math.min(3, num(w.stars)), completed: w.completed === true }
     if (num(w.bestEndless) > 0) p.worlds[id].bestEndless = num(w.bestEndless) // Endless mode best distance (only present once one is set)
+    if (w.challenge === true) p.worlds[id].challenge = true // the world's challenge was met on a completed run (challenges.js)
   }
   return p
 }
@@ -59,6 +60,7 @@ export function recordRun(progress, worldId, run) {
     completed: cur.completed || run.completed === true,
   }
   if (cur.bestEndless) next.bestEndless = cur.bestEndless
+  if (cur.challenge || (run.completed === true && run.challenge === true)) next.challenge = true // a badge, kept for good
   return { ...progress, worlds: { ...progress.worlds, [worldId]: next } }
 }
 
@@ -89,7 +91,7 @@ export function describeWorlds(progress, worlds, unlockAll = false) {
     const saved = progress.worlds[w.id] ?? { best: 0, bestOrbs: 0, stars: 0, completed: false }
     const open = unlockAll || isUnlocked(progress, w.id, ids)
     return {
-      id: w.id, name: w.name, finish: w.runner.finishDistance, stars: saved.stars, best: saved.best, completed: saved.completed,
+      id: w.id, name: w.name, finish: w.runner.finishDistance, stars: saved.stars, best: saved.best, completed: saved.completed, challenge: saved.challenge === true,
       locked: !open, unlockedBy: open || i === 0 ? null : worlds[i - 1].name, // "Finish <name> to unlock"
     }
   })

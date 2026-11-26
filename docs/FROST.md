@@ -1,3 +1,43 @@
+# Frost — Phase 6.6 (part 2): world challenges
+
+Part 2 of plan item 6.6 (part 1 was Endless mode). Cosmetic outfits (part 3) are not started. I read "per-world star goals" as **one
+optional challenge per world**, tied to the world's signature hazard and asking for skill, not just for finishing. If you meant
+something else by star goals, say so: this is a reading, not something you specified.
+
+| World | Challenge | Goal |
+| --- | --- | --- |
+| 01 Frozen Kingdom | Collect 90% of the orbs | 90% |
+| 02 Whispering Ice Forest | Three close calls with wolves | 3 |
+| 03 Crystal Mountains | Three close calls with falling crystals | 3 |
+| 04 Frozen Ocean | Jump over four holes in the ice | 4 |
+| 05 Frosted Dream Desert | Five close calls inside the mist | 5 |
+| 06 Sky of Aurora | Two close calls right after a gust (within 30 m) | 2 |
+| 07 Celestial Ice Palace | A close call with a wolf, a crystal and a hole | 1 each |
+
+- A **close call** is an obstacle that comes level with Aisha within 0.3 m without touching her (the 6.3 near miss), counted per kind.
+  A hole counts as **jumped** if she was in the air over it when it came level.
+- **Only a completed level run counts**: not a crash, not Endless. It works at any difficulty level.
+- **What it gives:** a badge (`◆` done, `◇` open) on the world card, and a line on the level-complete panel ("done!" or the progress, e.g. "40% / 90%").
+  The badge is saved per world, kept for good, and changes nothing else: no stars, no unlocks, no advantage in play.
+- Data: `src/runner/challenges.js` (one entry per world: text, goal, measure). Counting: `sim.tally` in the sim (passes, close calls by kind,
+  close calls in thick mist or soon after a gust, holes jumped), reset every run. Saved as `challenge: true` per world (absent until earned).
+- **Calibration, honestly:** I measured the Auto play bot (12 seeds per world): it finishes every level but takes **no** close calls with
+  hazards (it keeps wide margins), and its orb share is 75-94%. So the close-call challenges cannot be won by just finishing (a test
+  checks that the bot does not get its challenge for free), and World 01's 90% is right at the top of what the bot collects. The goal
+  numbers (3, 4, 5, 2, 1 each) are **first guesses and not validated against a human player**: they may turn out too easy or too hard.
+  They are constants in `challenges.js`.
+
+## Tests (run here)
+- `npm test`: 262/262 (new `tests/challenges.test.js`, 8 tests: every world has one; each is met exactly at its goal and not just below;
+  crash and Endless never count; capped progress labels; the badge is saved only by a completed run, kept, and old saves keep their shape;
+  save round trip and world cards; the sim tallies by kind, jumped holes (and a walked-in hole is a hit), mist and gust windows, and resets;
+  the bot finishes the world but does not earn a close-call badge).
+- `ONLY=challenge` 11/11 in headless Chrome: complete panel shows the challenge done and the badge is saved; a later run that falls short
+  shows its progress and keeps the badge; stars unaffected; Endless shows no challenge; all 7 world cards list their challenge with the right
+  badge; the complete panel with its extra line fits on a phone in portrait and landscape.
+- Regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,challenge` 222/222 (whole levels in the browser; the Retry/Restart button inside the viewport at 1534x630 and on phones).
+- **Not verified:** how hard the goals are for a person, and whether close calls against moving wolves are easy or hard to get on purpose.
+
 # Frost — Phase 6.2: sound (synthesized)
 
 The game had no audio. There are no sound files in the repository and none could be supplied, so **everything is synthesized with
