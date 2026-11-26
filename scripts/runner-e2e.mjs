@@ -1305,6 +1305,32 @@ if (want('music')) {
   await c2.ctx.close()
 }
 
+if (want('entry')) {
+  // Frost opens directly: there is no game-selection screen and nothing is called "Frost Girl" any more
+  const visit = async (query) => {
+    const ctx = await browser.newContext({ viewport: { width: 800, height: 450 } })
+    const page = await ctx.newPage(); active = page
+    const errors = []; page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto(`${base}/${query}`)
+    return { ctx, page, errors }
+  }
+  for (const [query, label] of [['', 'the site root'], ['?game=frost', '?game=frost'], ['?game=original', 'an old ?game=original bookmark'], ['?game=nonsense', 'an unknown ?game value']]) {
+    const { ctx, page, errors } = await visit(query)
+    await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+    const text = await page.locator('body').innerText()
+    check(`${label} opens Frost's own menu directly (Start run, Auto play, Worlds, Settings)`, ['Start run', 'Auto play', 'Worlds', 'Settings'].every((t) => text.includes(t)), text.replace(/\s+/g, ' ').slice(0, 120))
+    check(`${label}: no selection screen, no "Frost Girl", no "Enchanted Journey"`, !/choose your adventure|frost girl|enchanted journey/i.test(text) && !/frost girl/i.test(await page.title()), await page.title())
+    check(`${label}: no page errors`, errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  const { ctx, page } = await visit('?game=frost&mode=expedition')
+  await page.waitForSelector('canvas', { timeout: 120000 }); await realSleep(1500)
+  check('the earlier expedition prototype is still reachable at ?mode=expedition', /expedition/i.test(await page.locator('body').innerText()))
+  await ctx.close()
+  const meta = await (async () => { const v = await visit(''); const d = await v.page.evaluate(() => ({ title: document.title, desc: document.querySelector('meta[name="description"]')?.content, icon: document.querySelector('link[rel="icon"]')?.getAttribute('href') })); await v.ctx.close(); return d })()
+  check('the page title, description and icon say Frost', /^Frost/.test(meta.title) && /Frost/.test(meta.desc) && meta.icon === '/frost.svg' && !/girl/i.test(meta.title + meta.desc), JSON.stringify(meta))
+}
+
 // Retry/Restart button stays on screen at 1534x630 and on phones
 if (want('phone')) {
   const { ctx, page } = await open({ width: 1534, height: 630 })

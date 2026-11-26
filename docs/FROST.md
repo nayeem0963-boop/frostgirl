@@ -1,3 +1,31 @@
+# Frost — Phase 7.1: retiring "Frost Girl"
+
+On request, the standalone **Frost Girl** prototype (`?game=original`: the spiral-track runner with its own app, HUD and tests) is gone and **Frost**
+is the one game. This overrides the earlier standing rule to keep the original prototype intact. Its spiral mountain trail is brought into Frost in the next
+change (Phase 7.2); the path was recorded from `src/game/systems/spiralTrack.js` before deletion and is in git history.
+
+- **Entry:** the site root opens Frost's own menu (Start run, Auto play, Worlds, Settings) directly: there is no game-selection screen. Old
+  `?game=original` bookmarks, `?game=frost` and any unknown `?game` value all open Frost. The only other address left is the earlier
+  third-person expedition prototype at `?game=frost&mode=expedition` (it is not "Frost Girl"; say if it should go too).
+- **Removed:** `src/game/` (the original scene, systems, player, environment), `src/ui/`, `src/state/`, the original app and its styles, the selection
+  screen and its styles, the unused template images, `src/worlds/frozenKingdomPerspective.js`, the 5 MB Sketchfab Aisha model
+  (`public/assets/characters/`), and the original game's 11 test files (movement, run simulation, spiral track, camera, forest, crystal mountain,
+  track motion, artwork perspective, orb geometry, character preview and avatar tests). The world registry keeps only what Frost uses
+  (id, name, painting, runner theme).
+- **Renamed:** the page title is "Frost — Run" (it was "Frost Girl — Frozen Kingdom"), the meta description and the icon (`public/frost.svg`).
+- **Kept on purpose:** the orb model credit in the README (CC BY 4.0 requires it, and the runner still uses that model), Auto play, all
+  saved data (the keys were already `frost-runner-*`; nothing used a "Frost Girl" key), and the expedition prototype.
+- Older sections of this document describe the original game as it was at the time; they are history.
+
+## Tests (run here)
+- `npm test`: 222/222 (11 original-game test files removed; `tests/worlds.test.js`, `tests/readme.test.js` and `tests/sw.test.js` updated: the registry must hold only
+  what Frost uses, the README must not describe or link the retired game, and the orb credit must stay).
+- `ONLY=entry` 14/14 in headless Chrome: the site root, `?game=frost`, an old `?game=original` bookmark and an unknown `?game` each open Frost's menu with no
+  selection screen, no "Frost Girl" or "Enchanted Journey" text and no page errors; the expedition is still reachable; the title, description and icon say Frost.
+- Regression slice `ONLY=entry,desktop,phone,worlds,select,settings,offline,quality`: 152/152 checks passed (entry, desktop, phone, worlds, select, settings, offline, quality). The runner's own code is untouched by this change, so the
+  long whole-level, sound, music, challenge and outfit sections were not re-run for it (they run in the next change).
+- Build: the original app's chunk (79 kB) and stylesheet are gone from the production build; `public/assets` is 12 MB instead of 17 MB.
+
 # Frost — Phase 7.0: music
 
 A calm, generative music loop, synthesized with Web Audio like the effects (nothing to download, works offline). **I cannot hear it**: I wrote the

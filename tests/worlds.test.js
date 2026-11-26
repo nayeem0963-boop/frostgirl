@@ -42,13 +42,10 @@ test('World 01 generates exactly the obstacle rows it generated before worlds ex
   }
 })
 
-test('World 01 in the registry keeps its original fields and gains the runner theme', () => {
+test('the world registry has the seven worlds, each with its name, painting and runner theme', () => {
   const w = worlds[0]
   assert.equal(w.id, '01'); assert.equal(w.name, 'Frozen Kingdom')
-  assert.deepEqual(w.obstacles, ['iceBlock', 'snowBarrier', 'fallenPine'])
-  assert.deepEqual(w.collectibles, ['crystal'])
-  assert.deepEqual(w.palette, { sky: '#8ac5e9', snow: '#e5f7ff', ice: '#8fc8e3', forest: '#315b71' })
-  assert.deepEqual(w.fog, { color: '#abcddd', near: 100, far: 190 }, 'the original game\'s fog is untouched')
+  assert.deepEqual(Object.keys(w).sort(), ['background', 'id', 'name', 'runner'], 'only what Frost uses: no leftovers of the retired Frost Girl game')
   assert.equal(w.runner, runnerThemes['01'])
   assert.equal(worlds.length, 7)
   assert.deepEqual(worlds.map((x) => x.id), worldIds)

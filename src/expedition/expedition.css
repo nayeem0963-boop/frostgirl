@@ -1,5 +1,5 @@
-/* Frost expedition — every rule is scoped under .frost-root so it cannot
-   affect the original game. */
+/* Frost expedition prototype — every rule is scoped under .frost-root so it cannot
+   affect the runner. */
 .frost-root {
   position: fixed;
   inset: 0;
