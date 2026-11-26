@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   sound: true, // synthesized sound effects and a soft wind bed (never in Auto play); starts only after the first tap or key press
   motion: 'auto', // 'auto' follows the system "reduce motion" preference | 'on' | 'off': no camera shake, no flashes
   quality: 'auto', // 'auto' picks from the screen and pointer | 'low' | 'high'
+  buttons: 'auto', // on-screen LEFT / RIGHT and JUMP / SLIDE buttons: 'auto' shows them on touch screens | 'on' | 'off'. Keys and swipes always work too
   leftHanded: false, // the pause button moves to the left edge, away from a right thumb that is swiping
   highContrast: false, // warm amber glow on obstacles so they stand out from snow and ice for every kind of colour vision
   outfit: 'frost', // which of Aisha's outfits to draw (outfits.js); one that is still locked falls back to the original
@@ -17,7 +18,7 @@ export const DEFAULT_SETTINGS = {
   hintSeen: false, // the first-run controls hint has been dismissed
 }
 
-export const CHOICES = { motion: ['auto', 'on', 'off'], quality: ['auto', 'low', 'high'], difficulty: ['easy', 'normal', 'hard'] }
+export const CHOICES = { motion: ['auto', 'on', 'off'], buttons: ['auto', 'on', 'off'], quality: ['auto', 'low', 'high'], difficulty: ['easy', 'normal', 'hard'] }
 
 const store = () => (typeof localStorage === 'undefined' ? null : localStorage)
 
@@ -27,7 +28,7 @@ export function sanitize(raw) {
   if (!raw || typeof raw !== 'object') return out
   for (const k of ['haptics', 'sound', 'music', 'leftHanded', 'highContrast', 'hintSeen']) if (typeof raw[k] === 'boolean') out[k] = raw[k]
   if (typeof raw.outfit === 'string' && /^[a-z]{2,12}$/.test(raw.outfit)) out.outfit = raw.outfit
-  for (const k of ['motion', 'quality', 'difficulty']) if (CHOICES[k].includes(raw[k])) out[k] = raw[k]
+  for (const k of ['motion', 'buttons', 'quality', 'difficulty']) if (CHOICES[k].includes(raw[k])) out[k] = raw[k]
   return out
 }
 
@@ -57,3 +58,6 @@ export const resolveQuality = (settings, detected) => (settings.quality === 'aut
 /** The first-run hint shows until the first jump, or after this many metres of running (about 15 s; it never hangs around for good). */
 export const HINT_MAX_METRES = 110
 export const showHint = (settings, { auto, phase, dist }) => !settings.hintSeen && !auto && phase === 'running' && dist < HINT_MAX_METRES
+
+/** On-screen control buttons: the player's choice, else on for touch screens (a coarse pointer). */
+export const showButtons = (settings, coarsePointer) => settings.buttons === 'on' || (settings.buttons === 'auto' && !!coarsePointer)

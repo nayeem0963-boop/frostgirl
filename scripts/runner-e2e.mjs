@@ -1101,9 +1101,9 @@ if (want('sound')) {
   check('a crystal coming into range gives its warning sound, once', ((await st()).played.shard ?? 0) === 1)
   // M mutes and unmutes
   await clear(page)
-  const t0 = total(await st())
   await page.keyboard.press('KeyM'); await sleep(300)
   check('M turns sound off and saves it', (await stored()).sound === false)
+  const t0 = total(await st()) // counted after the mute took effect (a footstep between reading it and pressing M is not a leak)
   await page.keyboard.press('Space'); await sleep(900)
   check('while muted nothing is played', total(await st()) === t0, `${t0} -> ${total(await st())}`)
   await page.keyboard.press('KeyM'); await sleep(300)
@@ -1200,7 +1200,8 @@ if (want('outfit')) {
   const patched = (page) => S(page, () => { const sc = window.__frostRunner.debug.scene; const hues = []; sc.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m?.userData?.outfit) hues.push(m.userData.outfit.value) }); return hues })
   // pixels of Aisha (her own screen region) that are blue / reddish-orange, counted from a screenshot
   const colourCounts = async (page) => {
-    await page.keyboard.press('Enter'); await sleep(2200); await clear(page); await sleep(700)
+    await page.keyboard.press('Enter'); await sleep(2200); await clear(page)
+    await S(page, () => { for (const o of window.__frostRunner.sim.orbs) o.active = false }); await sleep(700) // no pickups in the crop: a light-blue orb in front of her would count as blue
     const png = await page.screenshot({ clip: { x: 320, y: 332, width: 65, height: 98 } })
     const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true })
     let blue = 0, red = 0
@@ -1324,11 +1325,138 @@ if (want('entry')) {
     await ctx.close()
   }
   const { ctx, page } = await visit('?game=frost&mode=expedition')
-  await page.waitForSelector('canvas', { timeout: 120000 }); await realSleep(1500)
+  await page.waitForSelector('canvas', { timeout: 120000 })
+  await page.waitForFunction(() => /expedition/i.test(document.body.innerText), null, { timeout: 60000 }).catch(() => {}) // its screen says "Preparing the mountain…" until the models load (a few seconds on a software renderer)
   check('the earlier expedition prototype is still reachable at ?mode=expedition', /expedition/i.test(await page.locator('body').innerText()))
   await ctx.close()
   const meta = await (async () => { const v = await visit(''); const d = await v.page.evaluate(() => ({ title: document.title, desc: document.querySelector('meta[name="description"]')?.content, icon: document.querySelector('link[rel="icon"]')?.getAttribute('href') })); await v.ctx.close(); return d })()
   check('the page title, description and icon say Frost', /^Frost/.test(meta.title) && /Frost/.test(meta.desc) && meta.icon === '/frost.svg' && !/girl/i.test(meta.title + meta.desc), JSON.stringify(meta))
+}
+
+if (want('spiral')) {
+  // 7.2: the curving spiral mountain trail (bend.js + scene/bendMaterial.js) and the unified HUD / on-screen buttons
+  const ROW100 = 18 // row of the path table at s = 104 m
+  const bendX = (page, row = ROW100) => S(page, (r) => window.__frostRunner.debug.bend.uniforms.uBend.value[r].x, row)
+  let fullBend = 0
+  const patched = (page) => S(page, () => { let on = 0, off = 0, aisha = 0; window.__frostRunner.debug.scene.traverse((o) => { if (!o.material) return; for (const m of [].concat(o.material)) { if (m.userData.bent) on++; else off++ } if (o.isSkinnedMesh && [].concat(o.material).some((m) => m.userData.bent)) aisha++ } ); return { on, off, aisha } })
+  {
+    const { ctx, page, errors } = await open({ width: 1000, height: 560 }, false, '&world=03&unlock=all&tier=low')
+    await page.keyboard.press('Enter'); await sleep(400)
+    check('World 03 starts nearly straight (under 1 m sideways 32 m ahead; the curve eases in over the first 90 m)', Math.abs(await bendX(page, 9)) < 1, `x@32m=${(await bendX(page, 9)).toFixed(2)}`)
+    await clear(page)
+    await S(page, () => { window.__frostRunner.sim.dist = 600 }); await sleep(600)
+    const x600 = await bendX(page); fullBend = x600
+    check('World 03 bends: 104 m ahead the trail is several metres to the side', Math.abs(x600) > 5, `x@104m=${x600.toFixed(1)} m`)
+    const p = await patched(page)
+    check('the trail, obstacles, trees and orbs follow the bend; Aisha herself is not bent', p.on >= 4 && p.aisha === 0, JSON.stringify(p))
+    await clear(page)
+    await page.keyboard.press('ArrowLeft'); await sleep(700)
+    const left = await sim(page)
+    check('lane change on the curve: she reaches the left lane exactly (x = -2.2)', Math.abs(left.x + 2.2) < 0.05 && left.lane === 0, `x=${left.x.toFixed(2)} lane=${left.lane}`)
+    await page.keyboard.press('ArrowUp'); await sleep(250)
+    const up = await sim(page)
+    check('jumping on the curve works (airborne, sim unchanged)', up.y > 0.3 && !up.grounded, `y=${up.y.toFixed(2)}`)
+    await sleep(900)
+    await page.keyboard.press('ArrowDown'); await sleep(200)
+    check('sliding on the curve works', (await S(page, () => window.__frostRunner.sim.duck)) > 0)
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await sleep(900)
+    await page.screenshot({ path: `${out}/spiral-03.png` })
+    check('no page errors on the spiral world', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    const { ctx, page } = await open({ width: 1000, height: 560 }, false, '&world=03&unlock=all&tier=low')
+    await page.evaluate(() => localStorage.setItem('frost-runner-settings-v1', JSON.stringify({ motion: 'on' })))
+    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(600)
+    await page.keyboard.press('Enter'); await sleep(400); await clear(page)
+    await S(page, () => { window.__frostRunner.sim.dist = 600 }); await sleep(600)
+    const calm = await bendX(page)
+    check('Reduce motion keeps the bend but gentler and steady', Math.abs(calm) > 0.5 && Math.abs(calm) < Math.abs(fullBend), `x@104m=${calm.toFixed(1)} m (full bend ${fullBend.toFixed(1)} m)`)
+    const reduced = await page.locator('.runner-root').getAttribute('data-reduce-motion')
+    check('...with the reduce-motion switch on', reduced === 'true')
+    await ctx.close()
+  }
+  {
+    const { ctx, page, errors } = await open({ width: 800, height: 450 }, false, '&unlock=all&tier=min')
+    await page.keyboard.press('Enter'); await sleep(300); await clear(page)
+    await S(page, () => { window.__frostRunner.sim.dist = 400 }); await sleep(500)
+    check('the lowest Graphics tier still draws the bend', Math.abs(await bendX(page)) > 0.2, `x@104m=${(await bendX(page)).toFixed(2)} (World 01 bends gently)`)
+    // switching worlds, restarting and pausing: straight worlds stay straight, nothing piles up in the scene
+    const geos = () => S(page, () => window.__frostRunner.debug.gl.info.memory.geometries)
+    await S(page, () => window.__frostRunner.reset()); await sleep(300)
+    const base = await geos()
+    for (const id of ['03', '02', '03', '04', '01']) {
+      await S(page, (id) => window.__frostRunner.selectWorld(id), id); await realSleep(600)
+      await page.keyboard.press('Enter'); await sleep(300); await clear(page)
+      await S(page, () => { window.__frostRunner.sim.dist = 500 }); await sleep(400)
+      const x = await bendX(page)
+      check(`world ${id} after switching: ${['01', '03'].includes(id) ? 'bends' : 'is straight'}`, ['01', '03'].includes(id) ? Math.abs(x) > 0.2 : Math.abs(x) < 1e-6, `x@104m=${x.toFixed(2)}`)
+      await page.getByTestId('restart-btn').click(); await sleep(200)
+      const d = await S(page, () => window.__frostRunner.sim.dist)
+      check(`world ${id}: Restart starts a fresh run (distance back near 0, phase running)`, d < 8 && (await sim(page)).phase === 'running', `dist=${d.toFixed(1)}`)
+      await page.keyboard.press('Escape'); await realSleep(300)
+      check(`world ${id}: Esc pauses`, (await page.locator('[data-screen="paused"]').count()) === 1)
+      await page.getByTestId('pause-restart').click(); await sleep(200)
+      check(`world ${id}: Restart from the pause screen resumes a fresh run`, (await page.locator('[data-screen="paused"]').count()) === 0 && (await sim(page)).phase === 'running')
+      await S(page, () => window.__frostRunner.reset()); await realSleep(300)
+    }
+    const after = await geos()
+    check('switching worlds five times does not pile up geometry (scene cleanup)', after - base < 4, `geometries ${base} -> ${after}`)
+    check('no page errors while switching, pausing and restarting', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // on-screen buttons: touch screens get them (Settings can force them on or off), Left-handed layout mirrors them
+    const { ctx, page, errors } = await open({ width: 844, height: 390 }, true, '&world=03&unlock=all&tier=low')
+    await page.getByText('Start run').click(); await sleep(400); await clear(page)
+    check('touch screen: LEFT / RIGHT / JUMP / SLIDE buttons show while running', (await page.locator('.runner-key').count()) === 4)
+    const rects = async () => S(page, () => Object.fromEntries([...document.querySelectorAll('.runner-key')].map((b) => { const r = b.getBoundingClientRect(); return [b.dataset.cmd, { x: r.x, y: r.y, w: r.width, h: r.height }] })))
+    let r = await rects()
+    check('buttons are on screen, at least 44 px high, LEFT/RIGHT on the left and JUMP/SLIDE on the right', Object.values(r).every((b) => b.h >= 44 && b.x >= 0 && b.x + b.w <= 844 && b.y + b.h <= 390) && r.left.x < 422 && r.jump.x > 422, JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, [Math.round(v.x), Math.round(v.y)]]))))
+    await page.locator('[data-cmd="right"]').tap(); await sleep(600)
+    check('tapping RIGHT changes lane', (await sim(page)).lane === 2)
+    await page.locator('[data-cmd="left"]').tap(); await page.locator('[data-cmd="left"]').tap(); await sleep(700)
+    check('tapping LEFT twice reaches the left lane', (await sim(page)).lane === 0)
+    await page.locator('[data-cmd="jump"]').tap(); await sleep(250)
+    check('tapping JUMP jumps', (await sim(page)).y > 0.3)
+    await sleep(900)
+    await page.locator('[data-cmd="duck"]').tap(); await sleep(200)
+    check('tapping SLIDE slides', (await S(page, () => window.__frostRunner.sim.duck)) > 0)
+    await page.screenshot({ path: `${out}/pad-landscape.png` })
+    // HUD: distance, orbs, pause and restart
+    const hud = await page.locator('.runner-hud').innerText()
+    check('HUD shows distance (m), the orb counter, Pause and Restart', /\d+ m/.test(hud) && (await page.locator('.runner-orbs').count()) === 1 && (await page.getByLabel('Pause').count()) === 1 && (await page.getByLabel('Restart').count()) === 1, hud.replace(/\s+/g, ' '))
+    await page.evaluate(() => localStorage.setItem('frost-runner-settings-v1', JSON.stringify({ leftHanded: true, hintSeen: true })))
+    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(600)
+    await page.getByText('Start run').click(); await sleep(400); await clear(page)
+    r = await rects()
+    check('Left-handed layout mirrors the buttons (JUMP/SLIDE left, LEFT/RIGHT right)', r.jump.x < 422 && r.left.x > 422, JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v.x)]))))
+    const pb = await page.getByLabel('Pause').boundingBox(), rb = await page.getByLabel('Restart').boundingBox()
+    check('Left-handed layout moves Pause and Restart to the left edge', pb.x < 422 && rb.x < 422)
+    await page.screenshot({ path: `${out}/pad-lefthanded.png` })
+    await page.getByLabel('Pause').tap(); await realSleep(300)
+    check('the buttons hide while paused', (await page.locator('.runner-key').count()) === 0)
+    await page.getByText('Resume').tap(); await realSleep(200)
+    await S(page, () => window.__frostRunner.reset()); await realSleep(300)
+    await page.getByText('Settings').tap(); await realSleep(300)
+    await page.getByTestId('buttons-setting').tap(); await realSleep(200) // auto -> on
+    await page.getByTestId('buttons-setting').tap(); await realSleep(200) // on -> off
+    check('Settings: On-screen buttons cycles auto -> on -> off', /off/.test(await page.getByTestId('buttons-setting').innerText()))
+    await page.getByText('Back').tap(); await realSleep(200)
+    await page.getByText('Start run').tap(); await sleep(400)
+    check('with On-screen buttons off, none are drawn (keys and swipes still work)', (await page.locator('.runner-key').count()) === 0)
+    await S(page, () => window.__frostRunner.reset()); await realSleep(300)
+    await page.getByRole('button', { name: 'Auto play' }).tap(); await sleep(600)
+    check('Auto play: no buttons, no pause or restart (watch-only)', (await page.locator('.runner-key').count()) === 0 && (await page.getByLabel('Restart').count()) === 0)
+    check('no page errors with the on-screen buttons', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    const { ctx, page } = await open({ width: 800, height: 450 })
+    await page.keyboard.press('Enter'); await sleep(300)
+    check('desktop (mouse + keyboard): no on-screen buttons by default', (await page.locator('.runner-key').count()) === 0)
+    await ctx.close()
+  }
 }
 
 // Retry/Restart button stays on screen at 1534x630 and on phones

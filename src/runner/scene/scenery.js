@@ -52,8 +52,11 @@ export function slotAhead(base, dist) {
 }
 
 /** Terrain height beside the trail: flat running surface, a soft snow bank at the shoulder, then a gentle rise. */
-export function groundY(x) {
+export const SLOPE = 0.045
+export const MOUNTAIN_SLOPE = 0.085 // worlds with a spiral trail: the snow ridge beside it climbs steeper, like a mountain side
+export const slopeFor = (theme) => (theme?.spiral ? MOUNTAIN_SLOPE : SLOPE)
+export function groundY(x, slope = SLOPE) {
   const ax = Math.abs(x)
   const t = Math.min(1, Math.max(0, (ax - 3.7) / 3))
-  return t * t * (3 - 2 * t) * 0.3 + Math.max(0, ax - 14) * 0.045
+  return t * t * (3 - 2 * t) * 0.3 + Math.max(0, ax - 14) * slope
 }

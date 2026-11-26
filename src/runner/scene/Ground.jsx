@@ -1,13 +1,14 @@
 // The snowy trail: a packed-snow running surface with three readable lanes,
 // flanked by snow banks. Geometry is static; the texture scrolls with the run.
 import { useFrame } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CanvasTexture, PlaneGeometry, RepeatWrapping, SRGBColorSpace } from 'three'
 import { LANES, LANE_WIDTH, TRAIL_HALF_WIDTH } from '../config.js'
-import { groundY } from './scenery.js'
+import { groundY, slopeFor } from './scenery.js'
 
 const TILE = 8 // metres of trail per texture repeat
 const LENGTH = 420
+const SEGMENTS_Z = 84 // a vertex every 5 m along the trail so that the spiral bend (scene/bendMaterial.js) curves it smoothly
 const CENTER_Z = -(LENGTH / 2) + 40
 
 function rng(seed) { let s = seed; return () => ((s = (s * 16807) % 2147483647) / 2147483647) }
@@ -70,14 +71,14 @@ function snowTexture(theme) {
   return t
 }
 
-function terrainGeometry() {
+function terrainGeometry(slope) {
   const width = 400, segX = 100
-  const g = new PlaneGeometry(width, LENGTH, segX, 1)
+  const g = new PlaneGeometry(width, LENGTH, segX, SEGMENTS_Z)
   g.rotateX(-Math.PI / 2)
   const p = g.attributes.position
   const uv = g.attributes.uv
   for (let i = 0; i < p.count; i++) {
-    p.setY(i, groundY(p.getX(i)) - 0.02)
+    p.setY(i, groundY(p.getX(i), slope) - 0.02)
     uv.setXY(i, p.getX(i) / TILE, -p.getZ(i) / TILE)
   }
   g.computeVertexNormals()
@@ -90,10 +91,11 @@ export function Ground({ sim, theme }) {
     trailMap.repeat.set(1, LENGTH / TILE)
     const snowMap = snowTexture(theme)
     snowMap.repeat.set(1, 1)
-    const trailGeo = new PlaneGeometry(TRAIL_HALF_WIDTH * 2, LENGTH)
+    const trailGeo = new PlaneGeometry(TRAIL_HALF_WIDTH * 2, LENGTH, 1, SEGMENTS_Z)
     trailGeo.rotateX(-Math.PI / 2)
-    return { trailMap, snowMap, side: terrainGeometry(), trailGeo }
+    return { trailMap, snowMap, side: terrainGeometry(slopeFor(theme)), trailGeo }
   }, [theme])
+  useEffect(() => () => { side.dispose(); trailGeo.dispose(); trailMap.dispose(); snowMap.dispose() }, [side, trailGeo, trailMap, snowMap]) // switching worlds builds a new trail: free the old one
   useFrame(() => {
     const d = sim.current.dist
     // features must move toward the camera (+z): their v coordinate shrinks as the run advances

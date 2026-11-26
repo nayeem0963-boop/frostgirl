@@ -13,7 +13,7 @@ import { TIER_DATA } from '../quality.js'
 // metres ahead of Aisha: LOD0 (~8k tris) up to NEAR, LOD1 (~1.5k) up to MID, LOD2 (~200) beyond. Slower tiers get tighter ranges (quality.js).
 const BEHIND_CAMERA = 9 // the camera sits ~6 m behind Aisha: trees further back are never drawn
 
-export function RunnerForest({ sim, quality }) {
+export function RunnerForest({ sim, quality, slope }) {
   const [LOD_NEAR, LOD_MID] = (TIER_DATA[quality] ?? TIER_DATA.high).lods
   const { scene } = useGLTF(ASSETS.spruces)
 
@@ -66,7 +66,7 @@ export function RunnerForest({ sim, quality }) {
       const l = ahead < LOD_NEAR ? 0 : ahead < LOD_MID ? 1 : 2
       const key = `${t.v}:${l}`
       const mesh = meshes[key]
-      tmp.position.set(t.x, groundY(t.x) - 0.15, -ahead)
+      tmp.position.set(t.x, groundY(t.x, slope) - 0.15, -ahead)
       tmp.rotation.set(t.lean, t.rot, t.lean * 0.6)
       tmp.scale.setScalar(t.h)
       tmp.updateMatrix()

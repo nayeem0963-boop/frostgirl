@@ -10,9 +10,9 @@ each finished by running a set distance (1500-2000 m) and each with its own look
 
 | World | Finish | Signature hazard |
 | --- | --- | --- |
-| 01 Frozen Kingdom | 1500 m | none (the original look: 3D mountains) |
+| 01 Frozen Kingdom | 1500 m | none (the original look: 3D mountains); the trail bends gently and climbs slowly |
 | 02 Whispering Ice Forest | 1500 m | a wolf waits at the trail's edge, then lunges into a lane |
-| 03 Crystal Mountains | 1600 m | crystal spires fall into lanes (a marker shows the lane first) |
+| 03 Crystal Mountains | 1600 m | crystal spires fall into lanes (a marker shows the lane first); the trail spirals up the mountain |
 | 04 Frozen Ocean | 1700 m | the ice cracks and breaks open: dodge or jump the hole |
 | 05 Frosted Dream Desert | 1800 m | banks of dream mist close the view to 10-50 m |
 | 06 Sky of Aurora | 1900 m | wind gusts shove Aisha one lane sideways at marked lines |
@@ -23,9 +23,16 @@ once a world is finished it also offers Endless mode. **Auto play** (a watch-onl
 Outfits for Aisha (colour variants) unlock from stars and badges. Everything is cosmetic or progress: there is no shop, no purchase and no
 online score.
 
-**Controls.** Arrow keys or A / D: change lane. Up, W or Space: jump. Down or S: duck. Esc or P: pause. M: sound and music on/off. Enter, Space or R:
-start or restart. On touch screens, swipe left, right, up or down. Settings (vibration, sound, music, difficulty, outfit, reduce motion, graphics,
-left-handed layout, high-contrast obstacles) are on the start screen.
+**The spiral trail.** The trail in Worlds 01 and 03 curves and climbs like the spiral mountain path of the retired Frost Girl prototype (World 03 fully, World 01
+gently). It is drawn that way only: the simulation is still a straight three-lane track, so lanes, jumps, slides, collisions, scoring and fairness are identical
+on every world, and the runner is always exactly on her lane. The camera turns into the bend, the curve eases in after the start and out before the finish, and
+**Reduce motion** makes it gentler and steady (no wobble, no rolling hills). See `src/runner/bend.js` and Phase 7.2 in docs/FROST.md.
+
+**Controls.** Arrow keys or A / D: change lane. Up, W or Space: jump. Down or S: slide. Esc or P: pause. M: sound and music on/off. Enter, Space or R:
+start or restart. On touch screens, swipe left, right, up or down, or use the on-screen **LEFT / RIGHT** and **JUMP / SLIDE** buttons (shown on touch screens by default;
+the **On-screen buttons** setting forces them on or off). While running, the top of the screen shows the distance (m), the orb counter, your best stars for the world and
+**Pause** and **Restart** buttons. Settings (vibration, sound, music, difficulty, outfit, reduce motion, graphics, on-screen buttons,
+left-handed layout, high-contrast obstacles) are on the start screen. **Left-handed layout** moves Pause and Restart to the left edge and swaps the two button groups.
 
 ## URL flags
 
@@ -58,7 +65,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 | Script | What it does |
 | --- | --- |
-| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,entry,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
+| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,entry,spiral,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
 | `node scripts/runner-perf.mjs <url> --budget [--world=NN]` | draw calls and triangles against the mobile budget (<= 350k triangles, <= 30 draw calls) |
 | `node scripts/net-report.mjs <built-dir> [query]` | bytes over the wire for a first visit, a second visit and an offline reload |
 | `node scripts/difficulty-report.mjs [seeds]` | the Auto play bot over every world and difficulty: density, tightness, finish rate (no browser) |
@@ -66,7 +73,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 ## Standing rules
 
-- Keep **Auto play** in every version. (The standalone "Frost Girl" prototype was retired on request; its spiral mountain trail is being brought into Frost.)
+- Keep **Auto play** in every version. (The standalone "Frost Girl" prototype was retired on request; its spiral mountain trail now lives in Frost's Worlds 01 and 03.)
 - Birds and skins (outfits) are cosmetic only: the same physics for everyone. No monetization, shops, daily challenges or leaderboard backends.
 - Obstacles stay fair: a reaction-time rule bounds every gap (`src/runner/sim/patterns.js`), at every difficulty.
 - Mobile budget: at most about 350k triangles and 30 draw calls per frame; 60 fps is the target and 30 the floor.
@@ -77,7 +84,8 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 - `src/runner/` the runner: `sim/` is the pure fixed-step simulation (obstacle generator, hazards, bot), `scene/` the three.js scenery,
   `audio/` the synthesized sound, plus settings, progress, challenges, outfits, quality tiers and difficulty.
 - `src/worlds/runnerThemes.js` the data for each world (colours, hazards, pattern weights, finish distance); `src/worlds/config.js` the registry.
-- `src/expedition/` and `src/game/` the earlier prototypes. `public/assets/` models (`expedition/*.glb`), world paintings and the orb.
+- `src/runner/bend.js` the spiral trail's path (pure maths, tested); `src/runner/scene/bendMaterial.js` the vertex shader patch that draws it.
+- `src/expedition/` the earlier expedition prototype. `public/assets/` models (`expedition/*.glb`), world paintings and the orb.
 - `docs/FROST.md` the full design and test record, newest phase first. `docs/PLAN-PHASE-6.md` the upgrade plan and what became of it.
 - `tests/` the unit tests (`npm test`). `scripts/` the browser scripts above and the asset tools.
 
