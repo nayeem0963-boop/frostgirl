@@ -14,13 +14,13 @@ const AFTER = 22 // ... and last this many metres after it
 function chevronTexture() {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128
   const g = c.getContext('2d')
-  g.fillStyle = 'rgba(70,255,215,0.28)'; g.fillRect(0, 10, 512, 108) // a glowing band under the chevrons
+  g.fillStyle = 'rgba(8,120,130,0.62)'; g.fillRect(0, 10, 512, 108) // a deep teal band: it must stand out against pale snow
   g.lineCap = 'round'; g.lineJoin = 'round'
   for (let i = 0; i < 6; i++) {
     const x = 40 + i * 80
     g.beginPath(); g.moveTo(x, 22); g.lineTo(x + 34, 64); g.lineTo(x, 106)
-    g.strokeStyle = 'rgba(20,120,110,0.9)'; g.lineWidth = 16; g.stroke()
-    g.strokeStyle = 'rgba(150,255,225,0.98)'; g.lineWidth = 7; g.stroke()
+    g.strokeStyle = 'rgba(4,60,80,1)'; g.lineWidth = 20; g.stroke()
+    g.strokeStyle = 'rgba(235,255,250,1)'; g.lineWidth = 9; g.stroke()
   }
   const t = new CanvasTexture(c); t.colorSpace = SRGBColorSpace
   return t
@@ -31,7 +31,7 @@ const rnd = (i, salt) => { const x = Math.sin(i * 12.9898 + salt * 78.233) * 437
 export function Gusts({ sim, gust }) {
   const { lines, streaks } = useMemo(() => {
     const flat = new PlaneGeometry(1, 1).rotateX(-Math.PI / 2)
-    const lines = new InstancedMesh(flat, new MeshBasicMaterial({ map: chevronTexture(), transparent: true, blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, side: DoubleSide }), 2)
+    const lines = new InstancedMesh(flat, new MeshBasicMaterial({ map: chevronTexture(), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, side: DoubleSide }), 2)
     lines.frustumCulled = false; lines.count = 0; lines.renderOrder = 1
     const streaks = new InstancedMesh(new BoxGeometry(2.4, 0.03, 0.03), new MeshBasicMaterial({ color: '#9affde', transparent: true, opacity: 0.55, blending: AdditiveBlending, depthWrite: false }), STREAKS)
     streaks.frustumCulled = false; streaks.count = 0
@@ -50,7 +50,7 @@ export function Gusts({ sim, gust }) {
       if (ahead > GUST.warn || ahead < -3) continue
       tmp.position.set(0, 0.045, -ahead)
       tmp.rotation.set(0, 0, 0)
-      tmp.scale.set(8.4 * dir, 1, 4.2) // a negative x scale mirrors the chevrons for a gust to the left
+      tmp.scale.set(8.4 * dir, 1, 14) // a negative x scale mirrors the chevrons for a gust to the left. Deep (14 m): the chase camera is low, so a shallow decal collapses into a thin line
       tmp.updateMatrix()
       lines.setMatrixAt(n++, tmp.matrix)
     }

@@ -111,3 +111,12 @@
 .runner-card-name { font-size: 17px; font-weight: 700; }
 .runner-card-meta { font-size: 13px; opacity: 0.95; }
 @media (max-height: 460px) { .runner-worlds { grid-template-columns: 1fr 1fr; width: min(760px, 94vw); } .runner-card { min-height: 52px; padding: 6px 10px; } .runner-select h2 { font-size: 22px; } }
+
+/* 'Close!' pop for a near miss: appears under the score, fades out on its own (opacity only, so it is fine with reduced motion) */
+.runner-close {
+  position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + clamp(40px, 8vw, 56px)); left: 0; right: 0; text-align: center; pointer-events: none;
+  font-size: clamp(18px, 4.6vw, 26px); font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #fff7c9;
+  text-shadow: 0 1px 8px rgba(10, 30, 60, 0.85); animation: runner-close 0.7s ease-out forwards;
+}
+@keyframes runner-close { 0% { opacity: 0; transform: translateY(6px) scale(0.9); } 15% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { @keyframes runner-close { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } } }

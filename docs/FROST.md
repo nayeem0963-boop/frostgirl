@@ -1,3 +1,32 @@
+# Frost — Phase 6.3: game feel and clearer warnings
+
+Cosmetic feedback only: nothing here changes scoring, collisions, speed or the generator, and the World 01 pins still pass.
+
+- **Near miss.** When an obstacle comes level with Aisha without touching her and the gap is under `NEAR_MISS = 0.3 m`
+  (sideways, or above/below for a jump over a ridge or a duck under an arch), the sim emits one `nearMiss` event
+  (`clearance()` in `sim/sim.js`; each obstacle is judged once). The screen shows a short "Close!" under the score (a fade,
+  also fine with reduced motion).
+- **Haptics** (`src/runner/feel.js`): short vibration patterns for an orb (8 ms), near miss (14 ms), gust, hit and level
+  complete, via `navigator.vibrate` where the device has it (Android phones; iOS Safari and desktop do not). A
+  "Vibration: on/off" switch on the start screen (only shown when the device supports it) is remembered in
+  `localStorage` (`frost-runner-haptics-v1`). Never in Auto play.
+- **Gust telegraph.** The ground marker was a 4 m deep decal that collapsed into a thin line from the low chase camera. It is now 14 m
+  deep with a deep-teal band and white-edged chevrons (normal blending: additive washed out on pale snow). It is clearly
+  visible in a headless still at about 45 m.
+- **Not done, on purpose:** a restart countdown. Every run already starts with 3.5 s of clear road (`RUN.safeSeconds`), so a countdown would
+  only add waiting; and the finish-line celebration already uses the Meshy `celebrate` clip since Phase 3.
+
+## Tests (run here)
+- `npm test`: 196/196 (new `tests/feel.test.js`, 8 tests: clearance maths, one nearMiss per close pass, none for a wide
+  pass or a hit, sim unchanged by consuming events, bot still finishes Worlds 01 and 07, haptic patterns, setting and
+  broken-storage handling).
+- `ONLY=feel node scripts/runner-e2e.mjs <url>`: 9/9 with a stubbed `navigator.vibrate` (the vibration itself was not felt:
+  headless Chrome has no motor): Vibration switch, "Close!" and its single light pulse, fade-out, hit pattern, switch off
+  and saved, survives reload, Auto play never vibrates.
+- `ONLY=desktop,phone,auto,gust`: 76/76, including the Retry/Restart button inside the viewport at 1534x630 and on phones.
+- Budget `--world=06`: gust line in view 23 draw calls / 231k triangles desktop, 22 / 187k phone portrait. Within budget.
+- Not verified: how the vibration patterns feel on a real phone, and the "Close!" timing by hand.
+
 # Frost — Phase 6.0: the Meshy Aisha in the original game
 
 The original Frost Girl game (`?game=original`) drew a different character from the runner: the Sketchfab "Aisha" preview

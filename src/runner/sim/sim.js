@@ -1,6 +1,6 @@
 // Pure runner simulation (no React / three): state machine, player physics,
 // obstacle pool + spawner, and collision. Fixed-step so it is deterministic.
-import { LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD, HOLE } from '../config.js'
+import { NEAR_MISS, LANES, PLAYER, RUN, OBSTACLES, ANIM, ORBS, LEVEL, WOLF, SHARD, HOLE } from '../config.js'
 import { starsFor } from '../progress.js'
 import { mistAt, fogAt, visionRange } from './mist.js'
 import { gustAt, avoidGust } from './gust.js'
@@ -56,7 +56,7 @@ export function createSim(seed = 1, world = themeFor('01')) {
     hitT: 0, // seconds since the hit
     knock: 0, // 0..1 eased knock-back after a hit (visual)
     count: {}, // lifetime event counters: jump, duck, lane, land, hit, start
-    events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start'
+    events: [], // 'jump' | 'land' | 'lane' | 'duck' | 'hit' | 'start' | 'orb' | 'gust' | 'nearMiss' | 'complete'
     obstacles: Array.from({ length: POOL }, () => ({ active: false, kind: 'wall', x: 0, dist: 0, id: 0 })),
     orbs: Array.from({ length: ORBS.pool }, () => ({ active: false, taken: false, takenT: 0, x: 0, y: 0, dist: 0, id: 0 })),
     stars: 0, // set on completion: 1 to 3
@@ -172,6 +172,15 @@ function hits(sim, o, prevAhead, ahead, ducked) {
   return hi > -pb.z1 && lo < -pb.z0
 }
 
+/** Gap in metres between her body box and an obstacle's box (0 when they overlap in both directions: that is a hit). */
+export function clearance(sim, o, ducked = sim.duck > 0 && sim.grounded) {
+  playerBox(sim, pb, ducked)
+  obstacleBox(o, ob)
+  const gx = Math.max(ob.x0 - pb.x1, pb.x0 - ob.x1, 0)
+  const gy = Math.max(ob.y0 - pb.y1, pb.y0 - ob.y1, 0)
+  return Math.hypot(gx, gy)
+}
+
 /** Would standing up right now put her head into an obstacle? (keeps her crouched under an arch) */
 function standBlocked(sim) {
   for (const o of sim.obstacles) {
@@ -213,6 +222,7 @@ function place(sim, row, at) {
     o.x = row.kind === 'wall' || row.kind === 'shard' || row.kind === 'hole' ? LANES[lane] : row.kind === 'wolf' ? o.side * WOLF.sideX : 0
     o.dist = at
     o.row = sim.gen.n
+    o.passed = false
   }
 }
 
@@ -356,6 +366,10 @@ function stepOnce(sim, dt) {
       sim.hitT = 0; sim.vx = 0
       emit(sim, 'hit')
       return
+    }
+    if (!o.passed && ahead <= 0) { // the obstacle is level with her and did not touch her: how close was it?
+      o.passed = true
+      if (clearance(sim, o, ducked) < NEAR_MISS) emit(sim, 'nearMiss')
     }
   }
   if (sim.dist >= sim.world.finishDistance) {
