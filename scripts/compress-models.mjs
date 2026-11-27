@@ -1,5 +1,5 @@
 // Mesh compression for the runtime models (6.8): applies EXT_meshopt_compression to the geometry and the animation data of every .glb in a
-// folder (default public/assets/expedition). Textures are NOT touched (they are already WebP), so no model changes how it is drawn.
+// folder (default src/assets/models). Textures are NOT touched (they are already WebP), so no model changes how it is drawn.
 // Rotations are stored with a 16-bit quaternion filter: on Aisha the largest change measured was 0.83 degrees at one keyframe
 // (a rotation and its negative are the same rotation, so sign flips do not count), translations changed by under 0.1% of the rig's size.
 // Idempotent: a file that already uses the extension is left alone.   Usage: node scripts/compress-models.mjs [folder]
@@ -11,7 +11,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import { meshopt } from '@gltf-transform/functions'
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer'
 
-const dir = process.argv[2] ?? 'public/assets/expedition'
+const dir = process.argv[2] ?? 'src/assets/models'
 await MeshoptEncoder.ready; await MeshoptDecoder.ready
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder })
 let before = 0, after = 0

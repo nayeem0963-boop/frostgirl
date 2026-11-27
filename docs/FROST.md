@@ -1,3 +1,66 @@
+# Frost — Phase 7.3: Asset Management V2 (Stages A and B)
+
+Approved from the audit in `docs/ASSET-AUDIT-V2.md`. Stage C (smaller textures) is **not** done: only AVIF candidates were produced for review.
+
+## What changed
+- **Manifest** (`src/assets/manifest.js`): every model and image, its size, whether a run needs it, and which world uses which (derived from the world themes).
+  Files moved from `public/assets/` to `src/assets/` and are referenced with `new URL(..., import.meta.url)`, so Vite content-hashes them (`aisha-DdMHRkh5.glb`).
+- **Caching** (`public/_headers`): `/assets/*` is `public, max-age=31536000, immutable`; `/`, `/index.html` and `/sw.js` are revalidated. The service worker (`frost-sw-v2`)
+  serves hashed models and images cache-first and deletes the older version of a file when a new one arrives; unhashed files (`/frost.svg`) stay stale-while-revalidate.
+- **Loader** (`src/assets/manager.js`, `gpu.js`, `index.js`): one download per asset however many callers ask; byte progress; a stall timeout (20 s without data) and up to three
+  retries with back-off (400 ms, 1.2 s, 3 s) for network errors, 5xx, 408 and 429 (not for other 4xx); cancellation with an AbortController; a plan (`active` loads now, `prefetch` fetches
+  bytes only, once nothing active is downloading); everything else is released: in-flight downloads are aborted, decoded models and textures are disposed (geometry, materials, textures,
+  skeleton, ImageBitmap), after a 400 ms delay so the scene has stopped drawing them. drei's `useGLTF` / `useTexture` are no longer used; the expedition prototype uses the same loader.
+- **Start menu first**: the menu shows as soon as the canvas is up; the models download behind it; Start, Endless and Auto play are disabled with "Loading 42% · 3.3 of 7.9 MB" until
+  they are in. `data-ready` on `.runner-root` is the new "playable" signal (`data-loaded` now only means the menu can show). A failed required file shows "Could not load the game files"
+  with Retry; a failed painted horizon is optional (a note and Retry, the world still plays).
+- **Active world only; next world preloaded**: World 01 loads the massif, 02 and 07 the wolf, 02-07 their own painting. The next world's files are fetched as bytes only once the
+  player is 35% into a level (or has finished it; never in Endless or Auto play), so someone who leaves early never pays for them. Leaving a world frees its models and textures.
+- **Worlds screen** uses 800x222 thumbnails (`src/assets/thumbs/`, 160 KB for all seven, made by `scripts/make-thumbnails.mjs`); the paintings are unchanged.
+- **Removed**: `.background-optimizer-cache.json` (the script now keeps it in the git-ignored `scripts/.cache/`), `public/favicon.svg` and `public/icons.svg` (searched `src/`, `index.html`,
+  `scripts/`, `tests/`, the README and docs: no reference, no runtime use). The World 01 painting is kept in `src/assets/backgrounds/` but is no longer referenced, so it is not shipped.
+- Tools: `scripts/net-report.mjs` now applies the build's `_headers` like Netlify, reports 304s and bytes at the moment the game is playable, and has `--no-sw` (browser cache only).
+  `scripts/make-avif-candidates.mjs` writes AVIF candidates beside extracted copies of the originals for a side-by-side check (output in the git-ignored `asset-candidates/`).
+
+## Before / after (production build, software GL, server-side byte counts, uncompressed; the host would compress the JS)
+| | Before (master 7e5cf02) | After |
+| --- | --- | --- |
+| First visit, World 01: bytes / requests until playable | 9.18 MB / 14 | 9.18 MB / 14 (unchanged: Stage C is what shrinks this) |
+| First visit, World 02 | 7.79 MB / 15 | 7.79 MB / 15 |
+| Start menu visible (1.6 Mbit/s, 150 ms) | 46.2 s (the menu waited for every model) | **3.2 s** |
+| Start menu visible (6 Mbit/s) | 14.7 s | **1.7 s** |
+| Playable (Start enabled) at 1.6 / 6 Mbit/s | 46.2 / 14.7 s | 45.1 / 13.8 s |
+| Repeat visit (service worker warm) | 0 MB, 5-6 requests (all 304 revalidations) | 0 MB, **1 request** (index.html) |
+| Repeat visit, browser cache only (no service worker) | 0 MB, 5-6 requests | 0 MB, **1 request** |
+| Offline reload | works | works |
+| Opening the Worlds screen | 7 requests, 2.04 MB | 7 requests, **0.16 MB** |
+| Tour of all seven worlds, one session | 12.36 MB, 27 requests, 6 paintings fetched twice | 12.26 MB, 27 requests, **no duplicate fetches** |
+| GPU texture memory after load (estimated from WebGL calls) | ~194 MB, 21 textures | ~194 MB, 21 textures |
+| ...after visiting all seven worlds | **~323 MB, 40 textures** (nothing released) | **~195 MB, 22 textures** (120 MB in Worlds 02-06) |
+| Draw calls / triangles, World 03 desktop | 27 / 248,767 | 27 / 251,667 |
+| JS (gzip) three + shared chunk | 185.7 + ~81 KB | 203.7 + 67.2 KB (about +4 KB: the glTF loader is now ours, drei's is gone) |
+
+Reading the table honestly: Stages A and B do not make a first visit smaller (the same files are downloaded; the 1.5 MB next-world preload only starts at 35% of a level). They make the
+page usable at once, make repeat visits one request, remove the Worlds-screen download, remove duplicate fetches and stop GPU memory growing. A session that opens the Worlds screen and
+then plays every world downloads the same total as before. Frame times from software rendering are not representative and are not claimed.
+
+## Tests (run here)
+- `npm test` 252/252, including `tests/assets.test.js` (17: manifest sizes and world sets, de-duplication, progress, prefetch then no second download, release and abort, retry and
+  back-off, 404 not retried, stall timeout, optional versus required, the Suspense contract) and the service-worker tests for hashed models and version replacement.
+- Browser, production build: the new `ONLY=assets` section, 34/34 (menu while the models are held back; Enter does not start; World 03 requests only its own painting and the core models;
+  the next world is fetched only after 35%, as bytes, and then needs no download; the massif is released on leaving and loads again on return; texture count does not grow over four worlds;
+  a failing required file shows Retry and recovers; a failing painting is optional; switching world cancels the wolf download; Worlds downloads seven thumbnails).
+  The full run passed apart from test code that assumed the old file names (`wolf.glb`) and that a run can start right after `selectWorld`; both fixed in the script, then the affected
+  sections (`wolf`, `offline`, `music`, `spiral`, `assets`, `phone`) passed again.
+- Not done: a deployment-update test in a browser (an old tab meeting a new deploy; only covered by the service-worker unit test and by HTML being revalidated), real-device tests,
+  and reading the live site's real response headers (see below).
+
+## Hosting investigation
+The Netlify deploy preview of this branch answers `401` to every path (it is access-protected), with `server: Netlify` and no Cloudflare headers on those responses, so its cache
+headers for assets could not be read; nothing was changed on Netlify, DNS or Cloudflare. The repo contains no Cloudflare or Worker configuration and no serverless function. To verify
+production, run `curl -sI https://<site>/assets/<hashed-file>` and `curl -sI https://<site>/` and check `cache-control: public, max-age=31536000, immutable` and `content-encoding: br`.
+
+
 # Frost — Phase 7.2: the spiral mountain trail and one HUD
 
 Second half of "Retire Frost Girl & integrate the spiral mountain adventure" (7.1 removed the prototype and its entry points).

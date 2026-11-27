@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 # Original source assets – keep local, don't upload to Git
 assets-source/
+scripts/.cache
+asset-candidates

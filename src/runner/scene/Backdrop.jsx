@@ -1,9 +1,9 @@
-// The world's painting (public/assets/backgrounds/worlds/*.webp) as the distant horizon, for worlds 2-7. The paintings are
+// The world's painting (src/assets/backgrounds/*.webp, loaded and released by the asset manager) as the distant horizon, for worlds 2-7. The paintings are
 // portrait scenes with a road down the middle, so only their TOP part (sky, aurora, castles, trees) is used, mirrored across
 // the width and faded into the sky above and the fog below. World 1 keeps the 3D mountain massif and never mounts this.
-import { useTexture } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useAsset } from '../../assets/index.js'
 import { CanvasTexture, ClampToEdgeWrapping, MirroredRepeatWrapping, SRGBColorSpace } from 'three'
 
 const DISTANCE = 520
@@ -20,8 +20,8 @@ function fadeTexture() {
   return t
 }
 
-export function Backdrop({ url, crop = 0.42, sim = null }) {
-  const painting = useTexture(url)
+export function Backdrop({ id, crop = 0.42, sim = null }) {
+  const painting = useAsset(id) // 'bg-02' .. 'bg-07'
   const { map, fade, width, repeat } = useMemo(() => {
     const map = painting.clone()
     map.colorSpace = SRGBColorSpace
@@ -35,6 +35,7 @@ export function Backdrop({ url, crop = 0.42, sim = null }) {
     return { map, fade: fadeTexture(), width, repeat }
   }, [painting, crop])
   void repeat
+  useEffect(() => () => { map.dispose(); fade.dispose() }, [map, fade]) // our own GPU copies; the painting itself is freed by the asset manager when the world is left
   const matRef = useRef()
   useFrame(() => { if (sim && matRef.current) matRef.current.opacity = 0.95 * (1 - 0.8 * sim.current.mist) }) // the painting fades into the mist (World 05)
   return (

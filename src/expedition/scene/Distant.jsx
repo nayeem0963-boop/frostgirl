@@ -1,7 +1,6 @@
-import { useGLTF } from '@react-three/drei'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Box3, Color, Vector3 } from 'three'
-import { ASSETS } from '../assets.js'
+import { useAsset } from '../../assets/index.js'
 
 const HAZE = new Color('#c3d2e2')
 
@@ -20,7 +19,7 @@ function applyHaze(material, amount) {
 
 /** The Frost Mountain Massif: the summit landmark on the northern horizon. */
 export function MountainMassif({ world }) {
-  const { scene } = useGLTF(ASSETS.massif)
+  const { scene } = useAsset('massif')
   const object = useMemo(() => {
     const root = scene.clone(true)
     root.traverse((o) => {
@@ -42,9 +41,6 @@ export function MountainMassif({ world }) {
     root.position.set(-box.getCenter(new Vector3()).x, groundY - box.min.y - 260, z - box.getCenter(new Vector3()).z)
     return root
   }, [scene, world])
+  useEffect(() => () => object.traverse((o) => { if (o.isMesh) o.material.dispose() }), [object]) // our cloned materials (the model's textures are freed by the asset manager)
   return <primitive object={object} />
 }
-
-// Not preloaded at import time any more: the runner imports this file too, and Worlds 02-07 (painted backdrop) never draw the massif.
-// The expedition and the runner's World 01 call this themselves.
-export const preloadMassif = () => useGLTF.preload(ASSETS.massif)

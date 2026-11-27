@@ -1,13 +1,12 @@
 // Aisha for the runner: the same rigged GLB and clips the expedition uses
-// (public/assets/expedition/aisha.glb). Clip data was measured from the rig (see docs/FROST.md):
+// (src/assets/models/aisha.glb). Clip data was measured from the rig (see docs/FROST.md):
 //  - `run`  stance foot ~4 m/s at 1x: playback rate follows ground speed (sim.runRate), so the feet keep pace.
 //  - `land` (a Regular_Jump export): 0.54-1.12 s is the airborne part, 0.26-0.34 s the crouch (head top 1.18 m).
 //  - `slide` drifts 1.3 m forward / 0.24 m sideways: never used here.
-import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { AnimationMixer, LoopOnce, LoopRepeat } from 'three'
-import { ASSETS } from '../../expedition/assets.js'
+import { useAsset } from '../../assets/index.js'
 import { subclip } from '../../expedition/actors/Aisha.jsx'
 import { runRate } from '../sim/sim.js'
 import { applyOutfit } from './outfitMaterial.js'
@@ -27,7 +26,7 @@ export const RUNNER_STATES = {
 }
 
 export function RunnerAisha({ sim, debug, outfit }) {
-  const gltf = useGLTF(ASSETS.aisha)
+  const gltf = useAsset('aisha')
   const root = useRef()
   const tilt = useRef()
   const yaw = useRef()
@@ -110,4 +109,3 @@ export function RunnerAisha({ sim, debug, outfit }) {
   )
 }
 
-useGLTF.preload(ASSETS.aisha)

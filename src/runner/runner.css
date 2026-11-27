@@ -159,6 +159,11 @@
 .runner-challenge { font-size: clamp(13px, 3.4vw, 16px); margin: 2px 0 0; }
 .runner-challenge[data-done="true"] { font-weight: 700; }
 
+/* asset loading (src/assets): progress under the start buttons while the models arrive */
+.runner-load { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 190px; margin-top: 4px; font-size: 13px; font-weight: 600; }
+.runner-load i { display: block; height: 4px; min-width: 6px; border-radius: 3px; background: #8fe3ff; box-shadow: 0 0 8px rgba(143, 227, 255, 0.7); transition: width 0.2s; align-self: flex-start; }
+.runner-btn:disabled { opacity: 0.55; cursor: progress; }
+.runner-link { background: none; border: 0; padding: 0; color: #fff; text-decoration: underline; font: inherit; cursor: pointer; }
 /* 7.2 on-screen buttons: LEFT / RIGHT on one side, JUMP / SLIDE on the other; Left-handed layout swaps them. Compact and low so they leave the lanes clear. */
 .runner-pad { position: absolute; left: 0; right: 0; bottom: max(10px, env(safe-area-inset-bottom)); padding: 0 max(12px, env(safe-area-inset-left)); display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; }
 .runner-pad-move, .runner-pad-act { display: inline-flex; gap: 10px; }

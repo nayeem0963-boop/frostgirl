@@ -1,13 +1,12 @@
-import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { AnimationMixer, Box3, LoopRepeat, Vector3 } from 'three'
-import { ASSETS } from '../assets.js'
+import { useAsset } from '../../assets/index.js'
 
 const BODY_LENGTH = 1.6 // metres, nose to tail base-ish
 
 export function Wolf({ sim, world }) {
-  const gltf = useGLTF(ASSETS.wolf)
+  const gltf = useAsset('wolf')
   const root = useRef()
   const body = useRef()
   const cur = useRef(null)
@@ -98,4 +97,3 @@ export function Wolf({ sim, world }) {
   )
 }
 
-useGLTF.preload(ASSETS.wolf)

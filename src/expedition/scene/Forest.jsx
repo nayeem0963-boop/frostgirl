@@ -4,11 +4,10 @@
 // Trail-side forest: per variant, one InstancedMesh per LOD (0-2). A cheap
 // per-tree distance test (throttled, not every frame) assigns each tree to a
 // LOD. Far trees on the valley walls: static instanced LOD3.
-import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import { DoubleSide, Group, InstancedMesh, Object3D, Vector3 } from 'three'
-import { ASSETS } from '../assets.js'
+import { useAsset } from '../../assets/index.js'
 import { SPRUCE_VARIANTS } from '../world/world.js'
 
 // Switch distances in metres: [close detail, near].
@@ -35,7 +34,7 @@ function treeMatrix(dummy, t, sink) {
 }
 
 export function Forest({ world, quality }) {
-  const { scene } = useGLTF(ASSETS.spruces)
+  const { scene } = useAsset('spruces')
   const [r0, r1] = LOD_RANGES[quality] ?? LOD_RANGES.high
   const state = useRef({ x: Infinity, z: Infinity, fx: 0, fz: 0, t: 0 })
 
@@ -128,4 +127,3 @@ export function Forest({ world, quality }) {
   return <primitive object={forest.group} />
 }
 
-useGLTF.preload(ASSETS.spruces)

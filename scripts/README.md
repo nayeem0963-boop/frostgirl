@@ -14,7 +14,7 @@ python scripts/optimize-backgrounds.py
 
 The script scans `assets-source/backgrounds/` (not subdirectories) for PNG,
 JPG, JPEG, and WebP files and writes WebP files to
-`public/assets/backgrounds/worlds/`. The seven existing source base names map
+`src/assets/backgrounds/` (Vite content-hashes them at build time; see `src/assets/manifest.js`). The seven existing source base names map
 to the following standardized filenames (regardless of input extension):
 
 | Source base name | Output filename |

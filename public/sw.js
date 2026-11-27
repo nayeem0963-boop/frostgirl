@@ -1,10 +1,11 @@
 // Frost service worker: faster second visits and play without a connection after the first full visit.
 //  - pages (navigations): network first, so a new deploy is always picked up; the last copy is the offline fallback
-//  - hashed JS/CSS in /assets/: cache first (the file name changes with its content, so a cached copy can never be stale)
-//  - models and images (glb, webp, png, jpg, svg): stale-while-revalidate (instant from cache, refreshed in the background)
+//  - hashed files in /assets/ (JS, CSS, models, images: Vite puts a content hash in every name): cache first (the name changes with the
+//    content, so a cached copy can never be stale). When a new version of a file arrives, the old version of it is deleted from the cache.
+//  - other models and images with no hash in the name (e.g. /frost.svg): stale-while-revalidate (instant from cache, refreshed in the background)
 //  - everything else, other origins and non-GET requests: untouched
 // Only responses that came back OK are cached. Old cache versions are deleted on activation.
-const VERSION = 'frost-sw-v1'
+const VERSION = 'frost-sw-v2' // v2: models and images are content-hashed and cache first (v1 cached them stale-while-revalidate)
 const PAGES = `${VERSION}-pages`
 const HASHED = `${VERSION}-hashed`
 const MEDIA = `${VERSION}-media`
@@ -14,15 +15,25 @@ const KEEP = [PAGES, HASHED, MEDIA]
 function classify(url, mode, method, origin) {
   if (method !== 'GET' || url.origin !== origin) return null
   if (mode === 'navigate') return 'pages'
-  if (/\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.(js|css)$/.test(url.pathname)) return 'hashed'
+  if (/\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.(js|css|glb|webp|avif|png|jpe?g|svg)$/.test(url.pathname)) return 'hashed'
   if (/\.(glb|webp|png|jpe?g|svg)$/.test(url.pathname)) return 'media'
   return null
+}
+
+/** '/assets/aisha-DdMHRkh5.glb' -> '/assets/aisha.glb': the same file in another version has the same stem. */
+function stemOf(url) {
+  const m = new URL(url).pathname.match(/^(.*\/[^/]+)-[A-Za-z0-9_-]{8}(\.[a-z0-9]+)$/)
+  return m ? m[1] + m[2] : null
 }
 
 async function put(cacheName, request, response) {
   if (!response || !response.ok || response.type === 'opaque') return
   const cache = await caches.open(cacheName)
   await cache.put(request, response.clone())
+  if (cacheName === HASHED) { // a new version of a hashed file replaces the old one instead of piling up beside it
+    const stem = stemOf(request.url)
+    if (stem && cache.keys) for (const other of await cache.keys()) if (other.url !== request.url && stemOf(other.url) === stem) await cache.delete(other)
+  }
 }
 
 async function networkFirst(request) {

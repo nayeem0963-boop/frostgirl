@@ -14,8 +14,9 @@ from PIL import Image, ImageOps, __version__ as pillow_version
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "assets-source" / "backgrounds"
-DESTINATION = ROOT / "public" / "assets" / "backgrounds" / "worlds"
-CACHE_NAME = ".background-optimizer-cache.json"
+DESTINATION = ROOT / "src" / "assets" / "backgrounds"
+CACHE_DIR = ROOT / "scripts" / ".cache"  # build-tool cache: kept out of the folders that ship to the site
+CACHE_NAME = "background-optimizer-cache.json"
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 OUTPUT_NAMES = {
     "world 1 frozen kingdom": "world-01-frozen-kingdom.webp",
@@ -93,7 +94,8 @@ def main():
 
     try:
         DESTINATION.mkdir(parents=True, exist_ok=True)
-        cache_path = DESTINATION / CACHE_NAME
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path = CACHE_DIR / CACHE_NAME
         cache = load_cache(cache_path)
         sources = sorted(
             (path for path in SOURCE.iterdir() if path.is_file() and path.suffix.lower() in EXTENSIONS),

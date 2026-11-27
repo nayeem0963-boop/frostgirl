@@ -2,12 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 
-const DIR = 'public/assets/expedition'
+const DIR = 'src/assets/models'
 const glbJson = (path) => { const b = readFileSync(path); return JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString('utf8')) }
-const files = readdirSync(DIR).filter((f) => f.endsWith('.glb')).sort()
+const all = readdirSync(DIR).filter((f) => f.endsWith('.glb')).sort()
+const files = all.filter((f) => f !== 'orb_of_chi.glb') // the orb is a small untextured model (checked below); the other four are the compressed, textured ones
 
-test('the runtime models are the four the game loads', () => {
+test('the runtime models are the four the game loads, plus the orb', () => {
   assert.deepEqual(files, ['alpine-spruces.glb', 'aisha.glb', 'mountain-massif.glb', 'wolf.glb'].sort())
+  assert.ok(all.includes('orb_of_chi.glb'))
 })
 
 test('every runtime model is mesh-compressed (EXT_meshopt_compression): a regenerated model must go through scripts/compress-models.mjs', () => {

@@ -2,11 +2,10 @@
 // (alpine-spruces.glb). They are scenery only: placement keeps every trunk and
 // crown clear of the lanes (scenery.js), so they never block the runner or the
 // camera. Instanced per variant and LOD; slots recycle as the run advances.
-import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useMemo } from 'react'
 import { DoubleSide, Group, InstancedMesh, Object3D } from 'three'
-import { ASSETS } from '../../expedition/assets.js'
+import { useAsset } from '../../assets/index.js'
 import { SLOTS_PER_SIDE, VARIANTS, groundY, slotAhead, treeAt } from './scenery.js'
 import { TIER_DATA } from '../quality.js'
 
@@ -15,7 +14,7 @@ const BEHIND_CAMERA = 9 // the camera sits ~6 m behind Aisha: trees further back
 
 export function RunnerForest({ sim, quality, slope }) {
   const [LOD_NEAR, LOD_MID] = (TIER_DATA[quality] ?? TIER_DATA.high).lods
-  const { scene } = useGLTF(ASSETS.spruces)
+  const { scene } = useAsset('spruces')
 
   const forest = useMemo(() => {
     // Bake each node's quantisation transform into the geometry (unit tree: base at y=0, ~1 high).
@@ -81,4 +80,3 @@ export function RunnerForest({ sim, quality, slope }) {
   return <primitive object={forest.group} />
 }
 
-useGLTF.preload(ASSETS.spruces)

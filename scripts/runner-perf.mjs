@@ -19,7 +19,7 @@ async function measure(name, viewport, mobile) {
   const ctx = await browser.newContext({ viewport, hasTouch: mobile, isMobile: mobile })
   const page = await ctx.newPage()
   await page.goto(`${base}/?game=frost&debug${worldQuery}`)
-  await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   await sleep(800)
   await page.keyboard.press('Enter')
   const gt = async (sec) => { const t0 = await page.evaluate(() => window.__frostRunner.sim.time); const end = Date.now() + 120000; while (Date.now() < end) { const t = await page.evaluate(() => { const s = window.__frostRunner.sim; if (s.phase !== 'running') throw new Error('run ended during measurement'); return s.time }); if (t - t0 >= sec) return; await sleep(25) } }
