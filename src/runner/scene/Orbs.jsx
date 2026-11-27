@@ -1,13 +1,12 @@
-// Orbs of Chi: instanced from public/assets/collectibles/orb_of_chi.glb (2,440 triangles, no textures).
+// Orbs of Chi: instanced from src/assets/models/orb_of_chi.glb (2,440 triangles, no textures).
 // The mesh is only decoration: collection is decided by the sim (sim.js collectOrbs).
-import { useGLTF } from '@react-three/drei'
+import { useAsset } from '../../assets/index.js'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { Box3, IcosahedronGeometry, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ORBS } from '../config.js'
 
-export const ORB_URL = `${import.meta.env.BASE_URL}assets/collectibles/orb_of_chi.glb`
 
 // The GLB's materials are 11-29% opaque (made for a dark background) and vanish against snow, so the runner restyles them:
 // a saturated translucent shell, a bright core and opaque ice-white crystals, all lit from within.
@@ -67,7 +66,7 @@ function orbParts(scene) {
 }
 
 export function Orbs({ sim }) {
-  const { scene } = useGLTF(ORB_URL)
+  const { scene } = useAsset('orb')
   const { group, meshes } = useMemo(() => {
     const group = new Object3D()
     const meshes = orbParts(scene).map(({ geometry, material }) => {
@@ -102,4 +101,3 @@ export function Orbs({ sim }) {
   return <primitive object={group} />
 }
 
-useGLTF.preload(ORB_URL)

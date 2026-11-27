@@ -3,7 +3,7 @@
  * Frost expedition asset pipeline.
  *
  * Converts the large source GLBs in `assets-source/` (kept out of Git) into
- * small, web-ready runtime GLBs in `public/assets/expedition/`.
+ * small, web-ready runtime GLBs in `src/assets/models/`.
  *
  *   node scripts/build-expedition-assets.mjs [path/to/assets-source] [only]
  *
@@ -30,7 +30,7 @@ import sharp from 'sharp'
 
 const SOURCE = path.resolve(process.argv[2] || 'assets-source')
 const ONLY = process.argv[3]
-const OUT = path.resolve('public/assets/expedition')
+const OUT = path.resolve('src/assets/models')
 fs.mkdirSync(OUT, { recursive: true })
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)

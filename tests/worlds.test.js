@@ -45,11 +45,11 @@ test('World 01 generates exactly the obstacle rows it generated before worlds ex
 test('the world registry has the seven worlds, each with its name, painting and runner theme', () => {
   const w = worlds[0]
   assert.equal(w.id, '01'); assert.equal(w.name, 'Frozen Kingdom')
-  assert.deepEqual(Object.keys(w).sort(), ['background', 'id', 'name', 'runner'], 'only what Frost uses: no leftovers of the retired Frost Girl game')
+  assert.deepEqual(Object.keys(w).sort(), ['background', 'id', 'name', 'runner', 'thumb'], 'only what Frost uses: no leftovers of the retired Frost Girl game')
   assert.equal(w.runner, runnerThemes['01'])
   assert.equal(worlds.length, 7)
   assert.deepEqual(worlds.map((x) => x.id), worldIds)
-  for (const x of worlds) { assert.equal(x.runner, runnerThemes[x.id]); assert.ok(x.background.endsWith('.webp')) }
+  for (const x of worlds) { assert.equal(x.runner, runnerThemes[x.id]); assert.ok(x.thumb.endsWith('.webp')); assert.equal(x.background === null, !x.runner.backdrop, 'a world has a full painting exactly when it draws one as its horizon') }
 })
 
 // ---- every world is well-formed -------------------------------------------------------------------------------------------

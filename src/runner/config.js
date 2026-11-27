@@ -47,7 +47,7 @@ export const ANIM = {
   maxRate: 2.5, // beyond this the cadence looks frantic; a small slip is accepted instead
 }
 
-// Orbs of Chi (public/assets/collectibles/orb_of_chi.glb): collectibles along the trail.
+// Orbs of Chi (src/assets/models/orb_of_chi.glb): collectibles along the trail.
 export const ORBS = {
   radius: 0.4, // collision radius (the mesh is scaled to match)
   groundY: 0.9, // lines at chest height: collected just by running through them

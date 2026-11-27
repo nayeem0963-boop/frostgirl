@@ -65,7 +65,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 | Script | What it does |
 | --- | --- |
-| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,entry,spiral,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
+| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,entry,spiral,assets,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
 | `node scripts/runner-perf.mjs <url> --budget [--world=NN]` | draw calls and triangles against the mobile budget (<= 350k triangles, <= 30 draw calls) |
 | `node scripts/net-report.mjs <built-dir> [query]` | bytes over the wire for a first visit, a second visit and an offline reload |
 | `node scripts/difficulty-report.mjs [seeds]` | the Auto play bot over every world and difficulty: density, tightness, finish rate (no browser) |
@@ -85,9 +85,23 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
   `audio/` the synthesized sound, plus settings, progress, challenges, outfits, quality tiers and difficulty.
 - `src/worlds/runnerThemes.js` the data for each world (colours, hazards, pattern weights, finish distance); `src/worlds/config.js` the registry.
 - `src/runner/bend.js` the spiral trail's path (pure maths, tested); `src/runner/scene/bendMaterial.js` the vertex shader patch that draws it.
-- `src/expedition/` the earlier expedition prototype. `public/assets/` models (`expedition/*.glb`), world paintings and the orb.
+- `src/expedition/` the earlier expedition prototype. `src/assets/` the models (`models/*.glb`), the world paintings and thumbnails, all content-hashed by Vite and listed in `src/assets/manifest.js`.
 - `docs/FROST.md` the full design and test record, newest phase first. `docs/PLAN-PHASE-6.md` the upgrade plan and what became of it.
 - `tests/` the unit tests (`npm test`). `scripts/` the browser scripts above and the asset tools.
+
+## Assets and loading
+
+Every model and image lives in `src/assets/` and is listed in `src/assets/manifest.js` (id, size, whether the run needs it, which world uses it). Vite gives
+each file a content hash (`aisha-DdMHRkh5.glb`), so `public/_headers` can cache everything under `/assets/` for a year as `immutable`; the page and the service worker
+are always revalidated. `src/assets/manager.js` downloads, de-duplicates, retries and cancels; `src/assets/gpu.js` decodes and frees GPU memory.
+
+- The start menu shows as soon as the page is up; the models download behind it, with a progress line, and **Start run** enables when they are in.
+- A world loads only what it uses (World 01: the 3D massif; Worlds 02 and 07: the wolf; Worlds 02-07: their painted horizon). The core models (Aisha, the forest, the orb) are loaded once.
+- Once the player is 35% through a level (or has finished it) the **next** world's files are fetched quietly, as bytes only. Leaving a world frees its models and textures.
+- A required file that fails is retried three times (400 ms, 1.2 s, 3 s) and then the start screen offers **Retry**; a failed painted horizon is optional (the world plays without it).
+- The Worlds screen shows small thumbnails (`src/assets/thumbs/`, made by `scripts/make-thumbnails.mjs` from the paintings, which stay as they are).
+- To add an asset: put the file in `src/assets/`, add it to the manifest (with its byte size: `tests/assets.test.js` checks it), and read it with `useAsset('id')` inside a component.
+- Measure: `npm run build && node scripts/net-report.mjs dist` (first visit, repeat visit, offline; `--no-sw` shows the browser's own cache); add `?world=03&unlock=all` as a second argument for another world.
 
 ## Open decisions and known gaps
 

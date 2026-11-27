@@ -38,7 +38,7 @@ async function open(viewport, mobile = false, query = '') {
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
   await page.goto(`${base}/?game=frost&debug${query}`)
-  await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   await realSleep(800)
   active = page
   return { ctx, page, errors }
@@ -337,7 +337,7 @@ if (want('level')) {
   check('a worse finish keeps the 3 saved stars', p.worlds['01'].stars === 3, JSON.stringify(p.worlds['01']))
   check('1 star for a finish with few orbs', (await page.locator('.runner-stars').getAttribute('aria-label')) === '1 of 3 stars')
   // reload: the start screen remembers
-  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('after a reload the start screen shows the earned stars', (await page.locator('[data-testid="level-info"] .stars b.on').count()) === 3)
   check('no page errors (levels)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
   await ctx.close()
@@ -347,10 +347,10 @@ if (want('level')) {
   // corrupt or hostile saved data must not break the game
   const { ctx, page, errors } = await open({ width: 800, height: 450 })
   await S(page, () => { localStorage.setItem('frost-runner-progress-v1', '{"version":1,"worlds":{"01":{"best":"lots","stars":99}}}') })
-  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('corrupt saved progress is ignored safely', (await page.getByTestId('level-info').isVisible()) && errors.length === 0, errors.slice(0, 2).join(' | '))
   await S(page, () => { localStorage.setItem('frost-runner-progress-v1', 'not json at all') })
-  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('unparsable saved progress is ignored safely', await page.getByTestId('level-info').isVisible())
   // Auto play finishes the level without touching the save
   await S(page, () => { localStorage.removeItem('frost-runner-progress-v1') })
@@ -380,9 +380,9 @@ if (want('level')) {
     await ctx.close()
   }
   const { ctx, page } = await open({ width: 800, height: 450 })
-  await page.goto(`${base}/?game=frost&debug&world=02&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.goto(`${base}/?game=frost&debug&world=02&unlock=all`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('World 02 start screen shows its name and 1500 m', /Whispering Ice Forest\s*·\s*1500 m/.test(await page.getByTestId('level-info').innerText()))
-  await page.goto(`${base}/?game=frost&debug&world=03&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.goto(`${base}/?game=frost&debug&world=03&unlock=all`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('World 03 start screen shows its name and 1600 m', /Crystal Mountains\s*·\s*1600 m/.test(await page.getByTestId('level-info').innerText()))
   await ctx.close()
 }
@@ -421,9 +421,9 @@ if (want('select')) {
   const saved = await S(page, (k) => JSON.parse(localStorage.getItem(k)), KEY)
   check('switching worlds keeps the saved progress', saved.worlds['01'].completed === true)
   // deep links
-  await page.goto(`${base}/?game=frost&debug&world=03`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.goto(`${base}/?game=frost&debug&world=03`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('?world=03 (locked) falls back to World 01', /Frozen Kingdom/.test(await page.getByTestId('level-info').innerText()))
-  await page.goto(`${base}/?game=frost&debug&world=03&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+  await page.goto(`${base}/?game=frost&debug&world=03&unlock=all`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
   check('?world=03&unlock=all opens World 03', /Crystal Mountains/.test(await page.getByTestId('level-info').innerText()))
   await page.getByRole('button', { name: 'Worlds' }).click(); await sleep(300)
   check('?unlock=all opens every world in the list', (await cardsState(page)).every((c) => !c.disabled))
@@ -449,7 +449,7 @@ if (want('select')) {
   for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
     const { ctx, page } = await open(vp, true)
     await S(page, () => localStorage.setItem('frost-runner-progress-v1', JSON.stringify({ version: 1, worlds: { '01': { best: 1500, bestOrbs: 300, stars: 2, completed: true } } })))
-    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 })
+    await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 })
     await page.getByRole('button', { name: 'Worlds' }).tap(); await sleep(300)
     await page.screenshot({ path: `${out}/phone-${tag}-worlds.png` })
     const fit = await S(page, ([w]) => [...document.querySelectorAll('.runner-card')].every((c) => { const r = c.getBoundingClientRect(); return r.left >= 0 && r.right <= w }), [vp.width])
@@ -474,13 +474,13 @@ if (want('wolf')) {
   {
     const { ctx, page } = await open({ width: 640, height: 360 })
     const files = await S(page, () => performance.getEntriesByType('resource').map((r) => r.name))
-    check('World 01 never downloads the wolf', !files.some((f) => /wolf\.glb/.test(f)))
+    check('World 01 never downloads the wolf', !files.some((f) => /wolf(-[\w-]+)?\.glb/.test(f)))
     check('World 01 draws only Aisha as a skinned mesh', (await shownSkinned(page)) === 1)
     await ctx.close()
   }
   const { ctx, page, errors } = await open({ width: 960, height: 540 }, false, '&world=02&unlock=all')
   const files = await S(page, () => performance.getEntriesByType('resource').map((r) => r.name))
-  check('World 02 loads the wolf model', files.some((f) => /wolf\.glb/.test(f)))
+  check('World 02 loads the wolf model', files.some((f) => /wolf(-[\w-]+)?\.glb/.test(f)))
   await page.keyboard.press('Enter'); await sleep(500); await clear(page)
   await putWolf(page, 1, 1, 46)
   let w = await waitAhead(page, 34)
@@ -794,7 +794,7 @@ if (want('feel')) {
     await ctx.addInitScript(() => { window.__buzz = []; navigator.vibrate = (p) => { window.__buzz.push(p); return true } })
     const page = await ctx.newPage(); const errors = []
     page.on('pageerror', (e) => errors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
-    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
     active = page
     return { ctx, page, errors }
   })()
@@ -821,14 +821,14 @@ if (want('feel')) {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 })
   await ctx.addInitScript(() => { window.__buzz = []; navigator.vibrate = (p) => { window.__buzz.push(p); return true } })
   const page = await ctx.newPage(); active = page
-  await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+  await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
   await page.getByRole('button', { name: 'Settings' }).click(); await sleep(200)
   await page.getByRole('switch', { name: /Vibration/ }).click()
   check('the Vibration switch turns off and the choice is saved', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1 && JSON.parse(await S(page, () => localStorage.getItem('frost-runner-settings-v1'))).haptics === false)
   await page.getByRole('button', { name: 'Back' }).click(); await sleep(200)
   await page.keyboard.press('Enter'); await sleep(400); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
   check('with vibration off a hit makes no vibration', (await S(page, () => window.__buzz.length)) === 0)
-  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(500)
   await page.getByRole('button', { name: 'Settings' }).click(); await sleep(200)
   check('the choice survives a reload', (await page.getByRole('switch', { name: /Vibration: off/ }).count()) === 1)
   await page.getByRole('switch', { name: /Vibration/ }).click() // back on, so the next check is about Auto play only
@@ -845,7 +845,7 @@ if (want('settings')) {
     await ctx.addInitScript(() => { navigator.vibrate = () => true })
     const page = await ctx.newPage(); const errors = []
     page.on('pageerror', (e) => errors.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
-    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
     active = page
     return { ctx, page, errors }
   })()
@@ -858,7 +858,7 @@ if (want('settings')) {
   await page.keyboard.press('Space'); await sleep(500)
   check('the hint goes away with the first jump', (await page.getByTestId('first-run-hint').count()) === 0)
   check('and is remembered (hintSeen)', (await stored()).hintSeen === true)
-  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(500)
   await page.keyboard.press('Enter'); await sleep(500)
   check('a later run does not show the hint again', (await page.getByTestId('first-run-hint').count()) === 0)
   await page.keyboard.press('Escape'); await sleep(200) // pause, then back to the start screen
@@ -882,7 +882,7 @@ if (want('settings')) {
   check('High-contrast obstacles turn the obstacle glow amber', (await stored()).highContrast === true && (await glow()) === 'ffa81f', String(await glow()))
   await page.keyboard.press('Escape'); await sleep(300)
   check('Esc closes the settings sheet', (await page.locator('[data-screen="start"]').count()) === 1)
-  await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+  await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(500)
   check('settings survive a reload', (await attr('data-left-handed')) === 'true' && (await attr('data-reduce-motion')) === 'true' && (await attr('data-high-contrast')) === 'true')
   // left-handed: the pause button sits at the left
   await page.keyboard.press('Enter'); await sleep(600)
@@ -899,7 +899,7 @@ if (want('settings')) {
     const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
     await ctx.addInitScript(() => { navigator.vibrate = () => true })
     const page = await ctx.newPage(); active = page
-    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.goto(`${base}/?game=frost&debug`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
     const startBtns = await page.locator('[data-screen="start"] button').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().bottom))
     check(`[phone-${tag}] the start screen still fits with the Settings button`, startBtns.every((b) => b <= vp.height), JSON.stringify(startBtns.map(Math.round)))
     await page.getByRole('button', { name: 'Settings' }).tap(); await sleep(300)
@@ -957,7 +957,7 @@ if (want('endless')) {
   for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
     const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
     const page = await ctx.newPage(); active = page
-    await page.goto(`${base}/?game=frost&debug&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.goto(`${base}/?game=frost&debug&unlock=all`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
     await page.getByRole('button', { name: 'Start run' }).tap(); await sleep(400); await clear(page); await place(page, 'wall', 1, 8); await sleep(1500)
     await page.waitForSelector('[data-screen="gameover"] .runner-menu', { timeout: 20000 }); await sleep(300)
     const r = await page.locator('[data-screen="gameover"] button').evaluateAll((els) => els.map((e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right } }))
@@ -969,7 +969,7 @@ if (want('endless')) {
 
 if (want('offline')) {
   // what the runner downloads: the 3.9 MB mountain massif is only for World 01 (and the expedition); Worlds 02-07 use a painted backdrop
-  const seen = async (query, ready = '.runner-root[data-loaded="true"]') => {
+  const seen = async (query, ready = '.runner-root[data-ready="true"]') => {
     const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, serviceWorkers: 'block' })
     const page = await ctx.newPage(); active = page
     const urls = []; const errors = []
@@ -978,18 +978,18 @@ if (want('offline')) {
     return { ctx, page, urls, errors }
   }
   const w2 = await seen('&world=02&unlock=all')
-  check('World 02 does not download the mountain massif', !w2.urls.some((u) => /mountain-massif\.glb$/.test(u)))
-  check('World 02 loads the wolf, its painting and the spruces', w2.urls.some((u) => /wolf\.glb$/.test(u)) && w2.urls.some((u) => /world-02.*\.webp$/.test(u)) && w2.urls.some((u) => /alpine-spruces\.glb$/.test(u)))
+  check('World 02 does not download the mountain massif', !w2.urls.some((u) => /mountain-massif(-[\w-]+)?\.glb$/.test(u)))
+  check('World 02 loads the wolf, its painting and the spruces', w2.urls.some((u) => /wolf(-[\w-]+)?\.glb$/.test(u)) && w2.urls.some((u) => /world-02.*\.webp$/.test(u)) && w2.urls.some((u) => /alpine-spruces(-[\w-]+)?\.glb$/.test(u)))
   // switching in-page to World 01 fetches it on demand and the scene keeps running
   await S(w2.page, () => window.__frostRunner.selectWorld('01')); await sleep(300)
-  for (let i = 0; i < 400 && !w2.urls.some((u) => /mountain-massif\.glb$/.test(u)); i++) await realSleep(50)
-  check('switching to World 01 in-page loads the massif on demand, with no page errors', w2.urls.some((u) => /mountain-massif\.glb$/.test(u)) && w2.errors.length === 0, w2.errors.slice(0, 2).join(' | '))
+  for (let i = 0; i < 400 && !w2.urls.some((u) => /mountain-massif(-[\w-]+)?\.glb$/.test(u)); i++) await realSleep(50)
+  check('switching to World 01 in-page loads the massif on demand, with no page errors', w2.urls.some((u) => /mountain-massif(-[\w-]+)?\.glb$/.test(u)) && w2.errors.length === 0, w2.errors.slice(0, 2).join(' | '))
   await w2.ctx.close()
   const w1 = await seen('')
-  check('World 01 still downloads and draws the massif', w1.urls.some((u) => /mountain-massif\.glb$/.test(u)) && w1.errors.length === 0)
+  check('World 01 still downloads and draws the massif', w1.urls.some((u) => /mountain-massif(-[\w-]+)?\.glb$/.test(u)) && w1.errors.length === 0)
   await w1.ctx.close()
   const ex = await seen('&mode=expedition', 'canvas')
-  check('the expedition still preloads the massif', ex.urls.some((u) => /mountain-massif\.glb$/.test(u)))
+  check('the expedition still preloads the massif', ex.urls.some((u) => /mountain-massif(-[\w-]+)?\.glb$/.test(u)))
   await ex.ctx.close()
 }
 
@@ -998,7 +998,7 @@ if (want('offline')) {
   const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } })
   const page = await ctx.newPage(); active = page
   const errors = []; page.on('pageerror', (e) => errors.push(e.message))
-  const visit = async () => { await page.goto(`${base}/?game=frost&debug&world=02&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(1200) }
+  const visit = async () => { await page.goto(`${base}/?game=frost&debug&world=02&unlock=all`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(1200) }
   await visit()
   const registered = await S(page, async () => { const r = await navigator.serviceWorker?.ready; return !!r?.active })
   check('the service worker registers and activates (production build)', registered)
@@ -1008,7 +1008,7 @@ if (want('offline')) {
   check('the page is controlled by the worker', controlled)
   await ctx.setOffline(true)
   let ok = true
-  try { await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 60000 }) } catch { ok = false }
+  try { await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 60000 }) } catch { ok = false }
   check('with NO connection the game reloads and loads', ok)
   if (ok) {
     await page.keyboard.press('Enter'); await sleep(1200)
@@ -1025,7 +1025,7 @@ if (want('quality')) {
     if (settingsJson) await ctx.addInitScript((j) => { try { if (!localStorage.getItem('frost-runner-settings-v1')) localStorage.setItem('frost-runner-settings-v1', j) } catch { /* ignore */ } }, settingsJson)
     const page = await ctx.newPage(); active = page
     const errors = []; page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto(`${base}/?game=frost&debug${query}`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.goto(`${base}/?game=frost&debug${query}`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
     await S(page, () => { const m = window.__frostRunner.debug.meter; m.o.window = 20; m.o.warmup = 1; m.o.cooldown = 2 }) // a short window so the test does not take minutes
     return { ctx, page, errors }
   }
@@ -1050,7 +1050,7 @@ if (want('quality')) {
     check('the run itself was unaffected (still running, moving)', (await sim(page)).phase === 'running' && (await sim(page)).dist > 0)
     check('no page errors (quality)', errors.filter((e) => !/GPU stall|ReadPixels/.test(e)).length === 0, errors.slice(0, 3).join(' | '))
     // 2. the next visit starts on the remembered tier
-    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(600)
+    await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(600)
     check('the next visit starts on the remembered tier (min)', (await tier(page)) === 'min')
     await ctx.close() }
 
@@ -1127,7 +1127,7 @@ if (want('sound')) {
   const off = await browser.newContext({ viewport: { width: 800, height: 450 } })
   await off.addInitScript(() => { try { localStorage.setItem('frost-runner-settings-v1', JSON.stringify({ sound: false })) } catch { /* ignore */ } })
   const p2 = await off.newPage(); active = p2
-  await p2.goto(`${base}/?game=frost&debug`); await p2.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+  await p2.goto(`${base}/?game=frost&debug`); await p2.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
   await p2.keyboard.press('Enter'); await sleep(1500); await p2.keyboard.press('Space'); await sleep(600)
   const t2 = await S(p2, () => Object.values(window.__frostRunner.debug.audio.stats.played).reduce((n, v) => n + v, 0))
   check('a saved "sound off" is silent from the first frame', t2 === 0, `${t2} sounds`)
@@ -1175,7 +1175,7 @@ if (want('challenge')) {
   for (const [vp, tag] of [[{ width: 390, height: 844 }, 'portrait'], [{ width: 844, height: 390 }, 'landscape']]) {
     const ctx = await browser.newContext({ viewport: vp, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
     const page = await ctx.newPage(); active = page
-    await page.goto(`${base}/?game=frost&debug&unlock=all`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(800)
+    await page.goto(`${base}/?game=frost&debug&unlock=all`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(800)
     await page.getByRole('button', { name: 'Start run' }).tap(); await sleep(400); await clear(page)
     await S(page, () => { const s = window.__frostRunner.sim; for (const q of s.obstacles) q.active = false; s.gen.lastPos = 1e9; s.dist = s.world.finishDistance - 30; s.orbCount = 95; s.orbsSeen = 100 })
     await page.waitForSelector('[data-screen="complete"] .runner-menu', { timeout: 90000 }); await sleep(500)
@@ -1194,7 +1194,7 @@ if (want('outfit')) {
     await ctx.addInitScript((i) => { try { if (!localStorage.getItem('__seeded')) { localStorage.setItem('__seeded', '1'); for (const [k, v] of Object.entries(i)) localStorage.setItem(k, v) } } catch { /* ignore */ } }, init)
     const page = await ctx.newPage(); active = page
     const errors = []; page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto(`${base}/?game=frost&debug&tier=high${query}`); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(1200)
+    await page.goto(`${base}/?game=frost&debug&tier=high${query}`); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(1200)
     return { ctx, page, errors }
   }
   const patched = (page) => S(page, () => { const sc = window.__frostRunner.debug.scene; const hues = []; sc.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m?.userData?.outfit) hues.push(m.userData.outfit.value) }); return hues })
@@ -1269,7 +1269,7 @@ if (want('music')) {
   const b1 = (await m()).bars
   check('the music keeps going, bar after bar, while the run goes on', await waitBars(b1 + 1) && (await sim(page)).phase === 'running', `${b1} -> ${(await m()).bars}`)
   // the music follows the world
-  await S(page, () => window.__frostRunner.selectWorld('04')); await sleep(400)
+  await S(page, () => window.__frostRunner.selectWorld('04')); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 120000 }); await sleep(400) // a new world loads its files first; a run cannot start before they are in
   check('the music retunes when the world changes (World 04)', (await m()).world === '04')
   await page.keyboard.press('Enter'); await sleep(600); await clear(page)
   // Music off: no more bars, saved; Sound stays on (effects still play)
@@ -1317,7 +1317,7 @@ if (want('entry')) {
   }
   for (const [query, label] of [['', 'the site root'], ['?game=frost', '?game=frost'], ['?game=original', 'an old ?game=original bookmark'], ['?game=nonsense', 'an unknown ?game value']]) {
     const { ctx, page, errors } = await visit(query)
-    await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(500)
+    await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(500)
     const text = await page.locator('body').innerText()
     check(`${label} opens Frost's own menu directly (Start run, Auto play, Worlds, Settings)`, ['Start run', 'Auto play', 'Worlds', 'Settings'].every((t) => text.includes(t)), text.replace(/\s+/g, ' ').slice(0, 120))
     check(`${label}: no selection screen, no "Frost Girl", no "Enchanted Journey"`, !/choose your adventure|frost girl|enchanted journey/i.test(text) && !/frost girl/i.test(await page.title()), await page.title())
@@ -1367,7 +1367,7 @@ if (want('spiral')) {
   {
     const { ctx, page } = await open({ width: 1000, height: 560 }, false, '&world=03&unlock=all&tier=low')
     await page.evaluate(() => localStorage.setItem('frost-runner-settings-v1', JSON.stringify({ motion: 'on' })))
-    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(600)
+    await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(600)
     await page.keyboard.press('Enter'); await sleep(400); await clear(page)
     await S(page, () => { window.__frostRunner.sim.dist = 600 }); await sleep(600)
     const calm = await bendX(page)
@@ -1386,7 +1386,7 @@ if (want('spiral')) {
     await S(page, () => window.__frostRunner.reset()); await sleep(300)
     const base = await geos()
     for (const id of ['03', '02', '03', '04', '01']) {
-      await S(page, (id) => window.__frostRunner.selectWorld(id), id); await realSleep(600)
+      await S(page, (id) => window.__frostRunner.selectWorld(id), id); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 120000 }); await realSleep(600)
       await page.keyboard.press('Enter'); await sleep(300); await clear(page)
       await S(page, () => { window.__frostRunner.sim.dist = 500 }); await sleep(400)
       const x = await bendX(page)
@@ -1427,7 +1427,7 @@ if (want('spiral')) {
     const hud = await page.locator('.runner-hud').innerText()
     check('HUD shows distance (m), the orb counter, Pause and Restart', /\d+ m/.test(hud) && (await page.locator('.runner-orbs').count()) === 1 && (await page.getByLabel('Pause').count()) === 1 && (await page.getByLabel('Restart').count()) === 1, hud.replace(/\s+/g, ' '))
     await page.evaluate(() => localStorage.setItem('frost-runner-settings-v1', JSON.stringify({ leftHanded: true, hintSeen: true })))
-    await page.reload(); await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 180000 }); await realSleep(600)
+    await page.reload(); await page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 180000 }); await realSleep(600)
     await page.getByText('Start run').click(); await sleep(400); await clear(page)
     r = await rects()
     check('Left-handed layout mirrors the buttons (JUMP/SLIDE left, LEFT/RIGHT right)', r.jump.x < 422 && r.left.x > 422, JSON.stringify(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v.x)]))))
@@ -1455,6 +1455,134 @@ if (want('spiral')) {
     const { ctx, page } = await open({ width: 800, height: 450 })
     await page.keyboard.press('Enter'); await sleep(300)
     check('desktop (mouse + keyboard): no on-screen buttons by default', (await page.locator('.runner-key').count()) === 0)
+    await ctx.close()
+  }
+}
+
+if (want('assets')) {
+  // Asset Management V2 (src/assets): the menu does not wait for the models; only the active world loads; the next world is fetched only
+  // once the player is well into the level; old worlds are released; failures can be retried; a cancelled load stops downloading.
+  const raw = async (query, setup, viewport = { width: 800, height: 450 }) => {
+    const ctx = await browser.newContext({ viewport, serviceWorkers: 'block' })
+    const page = await ctx.newPage(); active = page
+    const errors = [], seen = [], failed = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::ERR/.test(m.text())) errors.push(m.text()) })
+    page.on('request', (r) => { if (!/^(blob|data):/.test(r.url())) seen.push(new URL(r.url()).pathname.split('/').pop()) }) // blob: URLs are the browser decoding a file it already has, not downloads
+    page.on('requestfailed', (r) => failed.push(new URL(r.url()).pathname.split('/').pop()))
+    if (setup) await setup(page)
+    await page.goto(`${base}/?game=frost&debug&unlock=all${query}`)
+    return { ctx, page, errors, seen, failed }
+  }
+  const has = (seen, re) => seen.some((n) => re.test(n))
+  const state = (page, id) => S(page, (id) => window.__frostRunner.debug.assets.state(id), id)
+  const textures = (page) => S(page, () => window.__frostRunner.debug.gl.info.memory.textures)
+  const readyOf = (page) => page.waitForSelector('.runner-root[data-ready="true"]', { timeout: 120000 })
+  {
+    // 1. the menu comes first: the models are held back for 4 s and the start screen is already usable
+    let release
+    const gate = new Promise((r) => { release = r })
+    const { ctx, page, errors } = await raw('&world=03', (pg) => pg.route(/\.glb$/, async (route) => { await gate; route.continue() }))
+    await page.waitForSelector('.runner-root[data-loaded="true"]', { timeout: 120000 }); await realSleep(1500)
+    check('the start menu shows while the models are still downloading', (await page.getByRole('button', { name: 'Start run' }).count()) === 1 && (await page.locator('.runner-root').getAttribute('data-ready')) === 'false')
+    check('...with Start, Endless and Auto play disabled and a progress line', await page.getByRole('button', { name: 'Start run' }).isDisabled() && await page.getByRole('button', { name: 'Auto play' }).isDisabled() && /Loading \d+%/.test(await page.getByTestId('load-status').innerText()), (await page.getByTestId('load-status').innerText()).replace(/\s+/g, ' '))
+    await page.keyboard.press('Enter'); await realSleep(300)
+    check('Enter does not start a run before the models are in', (await S(page, () => window.__frostRunner.sim.phase)) === 'ready')
+    check('Worlds and Settings work meanwhile', await page.getByRole('button', { name: 'Settings' }).isEnabled() && await page.getByRole('button', { name: 'Worlds' }).isEnabled())
+    release(); await readyOf(page); await realSleep(300)
+    check('once the models arrive, Start is enabled and the progress line is gone', await page.getByRole('button', { name: 'Start run' }).isEnabled() && (await page.getByTestId('load-status').count()) === 0)
+    await page.keyboard.press('Enter'); await sleep(500)
+    check('...and a run starts', (await S(page, () => window.__frostRunner.sim.phase)) === 'running')
+    check('no page errors (menu first)', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // 2. only the active world is requested; the next world only after 35% of the level
+    const { ctx, page, seen, errors } = await raw('&world=03')
+    await readyOf(page); await realSleep(1500)
+    check('World 03 requests its own painting and the core models', has(seen, /^world-03-crystal/) && has(seen, /^aisha-/) && has(seen, /^alpine-spruces-/) && has(seen, /^orb_of_chi-/))
+    check('...and no other painting, no wolf, no massif', !has(seen, /^world-0[24567]-.*(forest|ocean|desert|aurora|palace)/) && !has(seen, /^wolf-/) && !has(seen, /^mountain-massif-/), JSON.stringify(seen.filter((n) => /world-|wolf|massif/.test(n))))
+    check('the next world (04) is not fetched while the level has barely begun', !has(seen, /^world-04-frozen/))
+    await page.keyboard.press('Enter'); await sleep(300); await clear(page)
+    await S(page, () => { window.__frostRunner.sim.dist = 0.4 * window.__frostRunner.sim.world.finishDistance }); await sleep(800); await realSleep(1500)
+    check('after 35% of the level the next world (04) is fetched in the background', has(seen, /^world-04-frozen/), JSON.stringify(seen.filter((n) => /world-/.test(n))))
+    check('...but not the world after that', !has(seen, /^world-05-frosted/))
+    check('...and it is kept as bytes only (no GPU texture for a world that is not on screen)', (await state(page, 'bg-04')) === 'fetched')
+    const before = seen.length
+    await S(page, () => window.__frostRunner.reset()); await realSleep(300)
+    await S(page, () => window.__frostRunner.selectWorld('04')); await readyOf(page); await realSleep(800)
+    check('switching to World 04 then needs no new download (it was preloaded)', !seen.slice(before).some((n) => /^world-04-frozen/), JSON.stringify(seen.slice(before)))
+    check('...and World 04 is ready and drawn', (await state(page, 'bg-04')) === 'ready' && (await state(page, 'bg-03')) === 'idle')
+    check('no page errors (loading plan)', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // 3. releasing: the massif (World 01) is freed on leaving, and loads again on return
+    const { ctx, page, errors } = await raw('&world=01')
+    await readyOf(page); await realSleep(800)
+    const t01 = await textures(page)
+    check('World 01 holds the massif', (await state(page, 'massif')) === 'ready')
+    await S(page, () => window.__frostRunner.selectWorld('03')); await readyOf(page); await realSleep(1500)
+    check('leaving World 01 releases the massif (decoded model freed)', (await state(page, 'massif')) === 'idle')
+    const t03 = await textures(page)
+    check('...and its GPU textures are freed', t03 < t01, `textures ${t01} -> ${t03}`)
+    for (const id of ['04', '05', '06']) { await S(page, (id) => window.__frostRunner.selectWorld(id), id); await readyOf(page); await realSleep(900) }
+    check('after visiting four worlds the texture count has not grown', (await textures(page)) <= t03 + 1, `textures ${t01} -> ${t03} -> ${await textures(page)}`)
+    await S(page, () => window.__frostRunner.selectWorld('01')); await readyOf(page); await realSleep(900)
+    check('returning to World 01 loads the massif again and draws it', (await state(page, 'massif')) === 'ready')
+    check('no page errors (release)', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // 4. a required file that cannot be loaded: retries, then a visible error and a Retry button that recovers
+    let up = false
+    const { ctx, page, errors } = await raw('&world=01', (pg) => pg.route(/mountain-massif-.*\.glb$/, (route) => (up ? route.continue() : route.abort('connectionfailed'))))
+    await page.waitForSelector('[data-testid="load-retry"]', { timeout: 60000 })
+    check('after its retries, a failed required file shows an error and a Retry button; Start stays disabled', /Could not load/.test(await page.getByTestId('load-status').innerText()) && await page.getByRole('button', { name: 'Start run' }).isDisabled())
+    up = true
+    await page.getByTestId('load-retry').click(); await readyOf(page)
+    check('Retry loads it and the game becomes playable', await page.getByRole('button', { name: 'Start run' }).isEnabled())
+    await page.keyboard.press('Enter'); await sleep(400)
+    check('...and a run starts', (await S(page, () => window.__frostRunner.sim.phase)) === 'running')
+    check('no page errors (retry)', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // 5. the painted horizon is optional: the world plays without it and says so; Retry brings it back
+    let up = false
+    const { ctx, page, errors } = await raw('&world=03', (pg) => pg.route(/world-03-crystal-mountains-.*\.webp$/, (route) => (up ? route.continue() : route.fulfill({ status: 404, body: 'nope' }))))
+    await readyOf(page); await realSleep(800)
+    check('a missing optional painting does not block the world (Start enabled, a note with Retry)', await page.getByRole('button', { name: 'Start run' }).isEnabled() && (await page.getByTestId('load-degraded').count()) === 1)
+    up = true
+    await page.getByTestId('load-degraded').getByRole('button', { name: 'Retry' }).click(); await realSleep(1500)
+    check('Retry loads the painting and the note goes away', (await state(page, 'bg-03')) === 'ready' && (await page.getByTestId('load-degraded').count()) === 0)
+    check('no page errors (optional asset)', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // 6. cancellation: leaving a world while its file is downloading stops that download
+    let hold
+    const gate = new Promise((r) => { hold = r })
+    const { ctx, page, failed, errors } = await raw('&world=01', (pg) => pg.route(/wolf-.*\.glb$/, async (route) => { await Promise.race([gate, new Promise((r) => setTimeout(r, 30000))]); route.continue().catch(() => {}) }))
+    await readyOf(page)
+    await S(page, () => window.__frostRunner.selectWorld('02')); await realSleep(1200)
+    check('World 02 waits for the wolf (Start disabled)', await page.getByRole('button', { name: 'Start run' }).isDisabled() && (await state(page, 'wolf')) === 'loading')
+    await S(page, () => window.__frostRunner.selectWorld('03')); await realSleep(1200)
+    check('moving on to World 03 cancels the wolf download', (await state(page, 'wolf')) === 'idle' && (await S(page, () => window.__frostRunner.debug.assets.stats.aborts)) >= 1)
+    await readyOf(page)
+    check('World 03 is ready without it', await page.getByRole('button', { name: 'Start run' }).isEnabled())
+    hold(); await realSleep(300)
+    check('no page errors (cancellation)', errors.length === 0, errors.slice(0, 2).join(' | '))
+    await ctx.close()
+  }
+  {
+    // 7. the Worlds screen uses the small thumbnails
+    const { ctx, page, seen } = await raw('&world=03')
+    await readyOf(page)
+    const before = seen.length
+    await page.getByRole('button', { name: 'Worlds' }).click(); await realSleep(2000)
+    const got = seen.slice(before).filter((n) => /\.webp$/.test(n))
+    check('opening Worlds downloads seven small thumbnails and no full painting', got.length === 7 && got.every((n) => /^world-0\d-[A-Za-z0-9_-]{8}\.webp$/.test(n)), JSON.stringify(got))
     await ctx.close()
   }
 }

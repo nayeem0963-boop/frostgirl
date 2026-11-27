@@ -1,8 +1,7 @@
-import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { AnimationMixer, AnimationUtils, LoopOnce, LoopRepeat } from 'three'
-import { ASSETS } from '../assets.js'
+import { useAsset } from '../../assets/index.js'
 
 // Gameplay animation states -> clips actually present in aisha.glb.
 // Sub-ranges (seconds) trim the long jump exports to the airborne part.
@@ -34,7 +33,7 @@ export function subclip(clip, name, [a, b], noLift) {
 }
 
 export function Aisha({ sim }) {
-  const gltf = useGLTF(ASSETS.aisha)
+  const gltf = useAsset('aisha')
   const root = useRef()
   const state = useRef({ current: null, name: '' })
 
@@ -100,4 +99,3 @@ export function Aisha({ sim }) {
   )
 }
 
-useGLTF.preload(ASSETS.aisha)

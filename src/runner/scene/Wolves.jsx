@@ -1,13 +1,12 @@
-// World 02's wolf (public/assets/expedition/wolf.glb: rigged, `run` and `walk` clips, ~10k triangles, faces +z, 1.62 m tall at
+// World 02's wolf (src/assets/models/wolf.glb: rigged, `run` and `walk` clips, ~10k triangles, faces +z, 1.62 m tall at
 // scale 1). The collision is decided by the sim (obstacle kind 'wolf', whose collider follows the visible wolf, see sim.js);
 // this only draws it: waiting at the edge of the trail, running into its lane, then holding there and facing the runner.
 // Skinned meshes cannot be instanced, so a small pool of clones is reused (at most POOL wolves are ever on screen).
-import { useGLTF } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { AnimationMixer, Group } from 'three'
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
-import { ASSETS } from '../../expedition/assets.js'
+import { useAsset } from '../../assets/index.js'
 import { LANES, WOLF } from '../config.js'
 import { wolfProgress } from '../sim/sim.js'
 import { groundY } from './scenery.js'
@@ -16,7 +15,7 @@ const POOL = 3
 const FEET = 0.81 // model feet are 0.81 m below its origin (at scale 1)
 
 export function Wolves({ sim }) {
-  const { scene, animations } = useGLTF(ASSETS.wolf)
+  const { scene, animations } = useAsset('wolf')
   const slots = useMemo(() => Array.from({ length: POOL }, () => {
     const root = new Group()
     const model = cloneSkinned(scene)

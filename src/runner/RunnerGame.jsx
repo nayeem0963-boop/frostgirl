@@ -5,7 +5,8 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACESFilmicToneMapping, Color, PointsMaterial, BufferAttribute, BufferGeometry, CanvasTexture, SRGBColorSpace, Vector3 } from 'three'
 import { Sky } from '../expedition/scene/Sky.jsx'
-import { MountainMassif, preloadMassif } from '../expedition/scene/Distant.jsx'
+import { MountainMassif } from '../expedition/scene/Distant.jsx'
+import { assets, useAssetVersion, planFor, THUMBS } from '../assets/index.js'
 import { Snowfall } from '../expedition/scene/Atmosphere.jsx'
 import { Ground } from './scene/Ground.jsx'
 import { Backdrop } from './scene/Backdrop.jsx'
@@ -38,6 +39,7 @@ import './runner.css'
 
 const SYSTEM_REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 const COARSE_POINTER = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+const PREFETCH_AT = 0.35 // fraction of a level after which the next world's files are fetched in the background
 const DONE_DELAY = 1400 // ms of celebration before the level-complete panel
 const OVER_DELAY = 600 // ms between the impact and the game-over panel / restart being available
 const FLAT_WORLD = { height: () => 0 } // MountainMassif only needs a ground height
@@ -218,6 +220,8 @@ function BendPatch({ bend }) {
 
 function Scene({ sim, bend, quality, world, endless, outfit, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, audio, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
+  useAssetVersion() // re-render when a model or painting finishes (or is released)
+  const have = (id) => assets.state(id) === 'ready'
   return (
     <>
       <color attach="background" args={[t.fog.color]} />
@@ -236,15 +240,17 @@ function Scene({ sim, bend, quality, world, endless, outfit, onPhase, onScore, o
       <group userData={{ noBend: true }}><Shadow sim={sim} /></group>
       <HitBurst sim={sim} />
       <group userData={{ noBend: true }}><Snowfall count={snowCount(t, quality)} paused={false} color={t.snow.color} /></group>
+      <Ready />
+      {/* models and paintings mount only once the asset manager has them decoded (src/assets): the scene around them draws from the first frame */}
       <Suspense fallback={null}>
-        <RunnerForest sim={sim} quality={quality} slope={slopeFor(t)} />
-        <group userData={{ noBend: true }}><RunnerAisha sim={sim} debug={debug} outfit={outfit} /></group>
-        <Orbs sim={sim} />
-        {t.hazards?.wolf && <Wolves sim={sim} />}
-        <Ready />
+        {have('spruces') && <RunnerForest sim={sim} quality={quality} slope={slopeFor(t)} />}
+        {have('aisha') && <group userData={{ noBend: true }}><RunnerAisha sim={sim} debug={debug} outfit={outfit} /></group>}
+        {have('orb') && <Orbs sim={sim} />}
+        {t.hazards?.wolf && have('wolf') && <Wolves sim={sim} />}
       </Suspense>
       <Suspense fallback={null}>
-        <group userData={{ noBend: true }}>{t.backdrop ? <Backdrop url={world.background} crop={t.backdrop.crop} sim={t.mist ? sim : null} /> : <MountainMassif world={FLAT_WORLD} />}</group>
+        {t.backdrop ? (have(`bg-${world.id}`) && <group userData={{ noBend: true }}><Backdrop id={`bg-${world.id}`} crop={t.backdrop.crop} sim={t.mist ? sim : null} /></group>)
+          : (have('massif') && <group userData={{ noBend: true }}><MountainMassif world={FLAT_WORLD} /></group>)}
       </Suspense>
     </>
   )
@@ -274,7 +280,6 @@ export default function RunnerGame() {
   const [progress, setProgress] = useState(() => loadProgress()) // saved per-world bests and stars (progress.js)
   const [world, setWorld] = useState(() => pickWorld(window.location.search, progress))
   const unlockAll = useMemo(() => unlockAllRequested(), [])
-  useMemo(() => { if (!world.runner.backdrop) preloadMassif() }, [world.runner.backdrop]) // only World 01 draws the 3D massif (3.9 MB): the other worlds use a painted backdrop and never download it
   const [screen, setScreen] = useState('start') // 'start' | 'worlds' (the world-select screen)
   if (!sim.current) { sim.current = createSim(1, world.runner); sim.current.phase = 'ready'; sim.current.anim = 'idle' }
   const [phase, setPhase] = useState('ready')
@@ -300,7 +305,17 @@ export default function RunnerGame() {
   const screenRef = useRef('start')
   useEffect(() => { screenRef.current = screen }, [screen])
   const bot = useRef(null)
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(false) // the canvas is up and the menu can show; the models arrive in the background (assetStatus.ready)
+  // Asset loading (src/assets): this world's models/painting load now, the next world's are fetched quietly, the rest is released.
+  const plan = useMemo(() => planFor(world.id), [world.id])
+  const planRef = useRef(plan)
+  // The next world is fetched quietly only once the player is well into this one (or has finished it), so someone who leaves early never pays for it.
+  const [warmWorld, setWarmWorld] = useState(null)
+  const warm = warmWorld === world.id
+  useEffect(() => { planRef.current = plan; assets.plan({ active: plan.active, prefetch: warm ? plan.prefetch : [] }) }, [plan, warm])
+  useAssetVersion()
+  const assetStatus = assets.status(plan.active)
+  const isReady = () => assets.status(planRef.current.active).ready
   // Quality tier: 'auto' starts from what the screen suggests (or lower, if this device was measured to need it) and steps down when
   // frames are slow (quality.js); a manual Graphics choice, or ?tier=high|low|min in the URL, is exact. ?fps shows a live readout.
   const flags = useMemo(() => { const p = new URLSearchParams(window.location.search); const t = p.get('tier'); return { fps: p.has('fps'), tier: TIERS.includes(t) ? t : null, adapt: p.has('adapt'), debug: p.has('debug') } }, [])
@@ -321,13 +336,14 @@ export default function RunnerGame() {
   const glConfig = useMemo(() => ({ antialias: quality === 'high', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }), []) // eslint-disable-line react-hooks/exhaustive-deps -- antialiasing is fixed when the canvas is created
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
-  useEffect(() => { if (debug) { debug.meter = meter; debug.audio = audio; debug.bend = bend } }, [debug, meter, audio, bend]) // ?debug: tests shorten the meter's window, read the sound counters and the spiral path
+  useEffect(() => { if (debug) { debug.meter = meter; debug.audio = audio; debug.bend = bend; debug.assets = assets } }, [debug, meter, audio, bend]) // ?debug: tests shorten the meter's window, read the sound counters and the spiral path
   const hitAt = useRef(0)
   const progressRef = useRef(progress)
   useEffect(() => { progressRef.current = progress }, [progress])
   const [showOver, setShowOver] = useState(false)
   const saved = progress.worlds[world.id] ?? { best: 0, bestOrbs: 0, stars: 0, completed: false }
   const finish = world.runner.finishDistance
+  useEffect(() => { if (!warm && !endless && !auto && (phase === 'complete' || (phase === 'running' && score >= finish * PREFETCH_AT))) setWarmWorld(world.id) }, [warm, endless, auto, phase, score, finish, world.id])
   const overTimer = useRef(0)
 
   useEffect(() => { readyCb = () => setLoaded(true); return () => { readyCb = () => {} } }, [])
@@ -335,6 +351,7 @@ export default function RunnerGame() {
   const start = useCallback(() => {
     const s = sim.current
     if (s.phase === 'running') return
+    if (!isReady()) return // the models are still arriving (the start screen shows the progress)
     if ((s.phase === 'gameover' || s.phase === 'complete') && performance.now() - hitAt.current < (s.phase === 'complete' ? DONE_DELAY : OVER_DELAY)) return // no accidental instant restart (the panel is not up yet)
     clearTimeout(autoTimer.current)
     startRun(s, (Math.random() * 1e9) | 0, { difficulty: difficultyRef.current, endless: endlessRef.current })
@@ -361,6 +378,7 @@ export default function RunnerGame() {
   const startAuto = useCallback(() => {
     const s = sim.current
     if (s.phase === 'running' && !s.auto) return
+    if (!isReady()) return
     clearTimeout(autoTimer.current)
     bot.current = createBot()
     startRun(s, (Math.random() * 1e9) | 0, { auto: true, difficulty: difficultyRef.current })
@@ -453,7 +471,7 @@ export default function RunnerGame() {
   }, [debug, start, startAuto, exitAuto, selectWorld])
 
   return (
-    <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded} data-reduce-motion={reduceMotion} data-left-handed={settings.leftHanded} data-high-contrast={settings.highContrast} data-tier={quality}>
+    <div className="runner-root" ref={root} data-phase={phase} data-paused={paused} data-loaded={loaded} data-ready={assetStatus.ready} data-reduce-motion={reduceMotion} data-left-handed={settings.leftHanded} data-high-contrast={settings.highContrast} data-tier={quality}>
       <Canvas
         dpr={(TIER_DATA[quality] ?? TIER_DATA.high).dpr}
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
@@ -508,12 +526,20 @@ export default function RunnerGame() {
           <h1>Frost</h1>
           <p className="runner-tag">Run the snowy trail with Aisha</p>
           <p className="runner-level" data-testid="level-info">{world.name} · {finish} m{settings.difficulty !== 'normal' && <> · {settings.difficulty}</>}{saved.stars > 0 && <> · <Stars n={saved.stars} /></>}{saved.best > 0 && saved.stars === 0 && <> · best {saved.best} m</>}</p>
-          <button className="runner-btn" onClick={startLevel} autoFocus>Start run</button>
-          {endlessOpen(progress, world.id, unlockAll) && <button className="runner-btn runner-btn-alt" onClick={startEndless} data-testid="endless-start">Endless{saved.bestEndless > 0 ? ` · best ${saved.bestEndless} m` : ''}</button>}
-          <button className="runner-btn runner-btn-alt" onClick={startAuto}>Auto play</button>
+          <button className="runner-btn" onClick={startLevel} autoFocus disabled={!assetStatus.ready}>Start run</button>
+          {endlessOpen(progress, world.id, unlockAll) && <button className="runner-btn runner-btn-alt" onClick={startEndless} data-testid="endless-start" disabled={!assetStatus.ready}>Endless{saved.bestEndless > 0 ? ` · best ${saved.bestEndless} m` : ''}</button>}
+          <button className="runner-btn runner-btn-alt" onClick={startAuto} disabled={!assetStatus.ready}>Auto play</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('worlds')}>Worlds</button>
           <button className="runner-btn runner-btn-alt" onClick={() => setScreen('settings')}>Settings</button>
-          <p className="runner-hint">Auto play: watch Aisha run by herself</p>
+          {!assetStatus.ready && (
+            <div className="runner-load" data-testid="load-status" role="status">
+              {assetStatus.failedRequired.length > 0
+                ? <><span>Could not load the game files. Check your connection.</span><button className="runner-btn runner-btn-alt" onClick={() => { assets.retry() }} data-testid="load-retry">Retry</button></>
+                : <><span>Loading {Math.round(assetStatus.fraction * 100)}% · {(assetStatus.loaded / 1048576).toFixed(1)} of {(assetStatus.total / 1048576).toFixed(1)} MB</span><i style={{ width: `${Math.round(assetStatus.fraction * 100)}%` }} /></>}
+            </div>
+          )}
+          {assetStatus.ready && assetStatus.failed.length > 0 && <p className="runner-hint" data-testid="load-degraded">The painted horizon did not load. <button className="runner-link" onClick={() => { assets.retry() }}>Retry</button></p>}
+          {assetStatus.ready && <p className="runner-hint">Auto play: watch Aisha run by herself</p>}
           <ul className="runner-help">
             <li><b>← →</b> / A D · swipe: change lane</li>
             <li><b>↑</b> / W / Space · swipe up: jump</li>
@@ -532,7 +558,7 @@ export default function RunnerGame() {
                 <button
                   className={`runner-card${c.id === world.id ? ' current' : ''}${c.locked ? ' locked' : ''}`}
                   data-world={c.id} disabled={c.locked} aria-disabled={c.locked} onClick={() => selectWorld(c.id)}
-                  style={{ '--art': `url(${allWorlds.find((x) => x.id === c.id).background})` }}
+                  style={{ '--art': `url(${THUMBS[c.id].url})` }}
                 >
                   <span className="runner-card-name">{c.id} · {c.name}</span>
                   <span className="runner-card-meta">

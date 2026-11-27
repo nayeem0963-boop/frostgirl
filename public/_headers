@@ -1,8 +1,12 @@
-# Netlify response headers. Hashed build files never change under the same name, so browsers may keep them for a year.
-/assets/*.js
+# Netlify response headers.
+# Everything Vite puts in /assets/ has a content hash in its name (scripts, styles, models, images: see src/assets/manifest.js), so the file
+# under a given name never changes and browsers and the CDN may keep it for a year. A deploy that changes a file gives it a new name.
+/assets/*
   Cache-Control: public, max-age=31536000, immutable
-/assets/*.css
-  Cache-Control: public, max-age=31536000, immutable
-# The service worker itself must always be re-checked, or updates to it would be delayed.
+# The page itself and the service worker must always be re-checked, or a deploy would not be picked up (Netlify's default, stated here on purpose).
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
 /sw.js
   Cache-Control: no-cache
