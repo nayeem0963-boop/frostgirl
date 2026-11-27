@@ -58,8 +58,11 @@ test('the controls the README lists are bound in the code', () => {
   for (const code of ["'KeyM'", "'KeyP'", "'Escape'", "'KeyR'"]) assert.ok(game.includes(code), code)
 })
 
-test('the standing rules are stated, and the stale claims of the old README are gone', () => {
+test('the standing rules are stated, and nothing of the retired Frost Girl game is described as current', () => {
   for (const phrase of ['Auto play', 'cosmetic only', '350k triangles', 'Do not claim something was tested']) assert.ok(readme.includes(phrase), phrase)
   assert.ok(!readme.includes('Other playable worlds and audio are not implemented yet'))
-  assert.ok(readme.indexOf('# The original Frost Girl prototype') > readme.indexOf('# Frost: the runner'), 'the runner comes first; the older notes are scoped under the original prototype heading')
+  assert.ok(!readme.includes('?game=original') && !readme.includes('track=straight'), 'no entry points of the retired game')
+  assert.ok(!/spiral track prototype|crystals follow a spaced/i.test(readme), 'no description of the retired prototype')
+  assert.ok(readme.includes('orb of Chi') && readme.includes('CC BY 4.0'), 'the orb model credit (a CC BY 4.0 requirement) stays')
+  assert.ok(readme.startsWith('# Frost\n'), 'the title is Frost')
 })

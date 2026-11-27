@@ -66,7 +66,7 @@ test('pages are network first and fall back to the last copy when offline', asyn
   w.setOnline(false)
   const offline = await w.handle(page)
   assert.equal(offline.url, page.url, 'a visited page is served from the cache with no connection')
-  const other = await w.handle(w.request('/?game=original', { mode: 'navigate' }))
+  const other = await w.handle(w.request('/?game=frost&world=03', { mode: 'navigate' }))
   assert.equal(other.url, 'https://frost.test/', 'a page never visited falls back to the cached start page')
 })
 

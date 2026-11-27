@@ -1,12 +1,7 @@
-# Frost Girl
+# Frost
 
-This repository holds three things, chosen by the address (`/` shows a selection screen):
-
-| Address | What it is |
-| --- | --- |
-| `/?game=frost` | **Frost**, the current game: a 3D three-lane snowy-trail runner with seven worlds. See below. |
-| `/?game=frost&mode=expedition` | An earlier third-person mountain expedition prototype, kept as it was. |
-| `/?game=original` | The original Frost Girl prototype (spiral track), kept intact. Its notes are in the sections further down. |
+Frost is a 3D three-lane snowy-trail runner with seven worlds. It is the only game here: opening the site goes straight to it (the earlier
+"Frost Girl" prototype has been retired). One older prototype remains: a third-person mountain expedition at `/?game=frost&mode=expedition`.
 
 # Frost: the runner
 
@@ -43,7 +38,7 @@ left-handed layout, high-contrast obstacles) are on the start screen.
 | `&tier=high\|low\|min` | force a render quality tier (no adaptation) |
 | `&adapt` | with `&debug`, let the quality tier adapt anyway |
 | `&mode=expedition` | the earlier expedition prototype (with `?game=frost`) |
-| dev server only | `?track=straight` (original game), `&skip=...` (expedition), `&viewer=aisha\|wolf\|...` (animation clip viewer) |
+| dev server only | `&skip=...` (expedition), `&viewer=aisha\|wolf\|...` (animation clip viewer) |
 
 Saved in the browser (`localStorage`): `frost-runner-progress-v1` (bests, stars, badges, Endless bests), `frost-runner-settings-v1`
 (settings and outfit), `frost-runner-tier-v1` (the render tier this device was measured to need).
@@ -63,7 +58,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 | Script | What it does |
 | --- | --- |
-| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
+| `node scripts/runner-e2e.mjs <url>` | browser end-to-end checks of a built, served game (`npm run build && npm run preview`, then the preview address). `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit,entry,wolf,shard,hole,mist,gust,palace,orbs` runs chosen sections. The full run takes about half an hour on a software renderer. |
 | `node scripts/runner-perf.mjs <url> --budget [--world=NN]` | draw calls and triangles against the mobile budget (<= 350k triangles, <= 30 draw calls) |
 | `node scripts/net-report.mjs <built-dir> [query]` | bytes over the wire for a first visit, a second visit and an offline reload |
 | `node scripts/difficulty-report.mjs [seeds]` | the Auto play bot over every world and difficulty: density, tightness, finish rate (no browser) |
@@ -71,7 +66,7 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 
 ## Standing rules
 
-- World 01 and the original game stay as they were; keep **Auto play** in every version.
+- Keep **Auto play** in every version. (The standalone "Frost Girl" prototype was retired on request; its spiral mountain trail is being brought into Frost.)
 - Birds and skins (outfits) are cosmetic only: the same physics for everyone. No monetization, shops, daily challenges or leaderboard backends.
 - Obstacles stay fair: a reaction-time rule bounds every gap (`src/runner/sim/patterns.js`), at every difficulty.
 - Mobile budget: at most about 350k triangles and 30 draw calls per frame; 60 fps is the target and 30 the floor.
@@ -91,28 +86,10 @@ Scripts that need a browser use Playwright, which is **not** a project dependenc
 - **Stars and difficulty:** stars and bests are recorded the same on every difficulty level. Options: leave it, cap Easy at 2 stars, or keep separate bests per level.
 - **Challenge goals and outfit requirements** are first guesses, not validated against a human player.
 - **Music is synthesized and unheard by me** (a calm generative loop per world; see Phase 7.0 in docs/FROST.md). **Textures** of the spruces and the World 01 massif are 2048-pixel WebP; lowering them would change how World 01 looks.
-- **Outfits and the new settings** apply in the runner only, not in the original game.
 - **Real devices:** no frame-rate or load-time measurement on a phone yet. Open the game with `&fps` on one and play a minute.
 
-# The original Frost Girl prototype (`?game=original`)
+## Measuring frame rate on a device
 
-The notes below describe the original prototype, which is kept intact. Obstacles, orbs and a straight-track scene exist in it; the runner above is the current game.
-
-## Development
-
-```sh
-npm install
-npm run dev
-```
-
-Open the local URL printed by Vite. Use `npm run build` for a production build,
-`npm run lint` to check the source, and `npm test` for movement tests.
-
-For comparison, open the development server with `?track=straight` to use the
-previous Frozen Kingdom scene and its obstacles and collectibles. This switch
-is development-only; production builds use the spiral prototype.
-
-## Performance measurement
 
 Compare production builds on the same device, browser, viewport and pixel ratio.
 Warm up the scene and keep the game visible and focused. Record several runs of
@@ -158,88 +135,11 @@ and collision effects separately. Paused gameplay uses on-demand rendering, so
 an animation-frame counter is not a measurement of paused render FPS. Responsive
 viewport emulation is not a substitute for testing on mobile hardware.
 
-Click or tap the scene, or tab to the game, to focus keyboard controls. Use
-Left/Right or A/D to switch lanes, Up/W/Space to jump, Down/S to slide, and
-Escape to pause or resume. The on-screen buttons work with touch and mouse.
-Reset returns the runner to the center lane without changing pause state.
-Reduced-motion users start with the game paused.
-The game also pauses when the browser tab is hidden; resume it when you return.
-It also pauses after a rendering stall longer than two seconds to avoid
-skipping ahead unexpectedly.
+## Credits
 
-The straight-track scene begins with a short countdown and a 12-second safe running period.
-The first obstacles leave the center lane open, and speed increases gradually. Collect
-the orbs. Jump over snow barriers and fallen pines, and switch lanes to avoid
-tall ice blocks. A collision stops the run; use reset to retry.
-Only the crystal count is tracked, and reset clears it.
-Crystals follow a spaced lane-to-lane pattern; their ground markers show the
-lane to aim for.
-The introductory title disappears when the run starts, leaving a small world
-label and the gameplay controls visible.
-Small recycled snow puffs mark jump takeoff and landing, and a short energy
-sparkle marks orb collection. Collisions briefly highlight the screen edge;
-the highlight is disabled for reduced-motion users. Feedback pauses with play
-and clears on reset. Sound effects are not included yet.
-
-## Structure
-
-- `src/game/` contains the viewport, scene, environment, player, and visual systems.
-- `src/game/systems/runnerMovement.js` contains movement state and tuning values.
-- `src/game/systems/runSimulation.js` contains countdown, run speed and
-  acceleration, learning-period patterns, pooled spawn state, swept collisions,
-  and crystal collection. Spacing, reaction time and pacing are configurable.
-- `src/worlds/config.js` defines the seven worlds; only World 1 is rendered.
-- `src/state/` holds scene UI state, and `src/ui/` contains the overlay.
-- `src/styles/` contains the game presentation.
-- `public/assets/backgrounds/worlds/` holds the optimized world backgrounds.
-- `scripts/` contains the background optimizer and its documentation.
-
-The spiral prototype uses a shared distance-based track frame, a pooled ribbon
-road, an upright follow camera and a capped device pixel ratio. The mountain
-environment reuses vertical core sections and contoured track-relative snow
-shelves with a rock face under the outer edge. It uses instanced pines, sparse
-crystals, lakes, clouds and ridges, plus overlapping low-poly distant ranges
-whose height is adjusted gradually as the runner climbs. Trees, crystals and
-lakes are grounded against the recycled shelf geometry; snow and exposed rock
-vary with terrain and altitude. Distant ridge snow also follows the slope, while
-subtly shaded shoulders and unevenly spaced, varied-size pines frame the road.
-The far ranges have irregular summits and broken snowlines. A procedural
-player-centered sky adds a blue gradient, restrained aurora, stars and a moon;
-small instanced cloud layers drift slowly without additional lights or shadows.
-The low cloud bank recedes gradually as the runner climbs.
-Forest and crystal density change
-smoothly with distance; waterfalls and a summit landmark occupy fixed positions,
-while the route continues climbing beyond the landmark. This remains a stylized
-draft: the underlying route is still a repeating spiral rather than traverses
-or hairpins, the terrain is not a continuous natural mountainside, and the
-summit and waterfalls are not consistently visible from the gameplay camera.
-The straight-track scene uses a single WebGL canvas, a small snow particle buffer,
-and a capped device pixel ratio. Frozen Kingdom uses a responsive 3D camera, a procedural
-sky and distant mountains instead of a gameplay background image. Instanced,
-recycled snow segments provide a level, frozen-ice three-lane corridor and
-contoured snowbanks. Clusters of branch-shaped, snow-covered pines and bare
-trees, mountains, snowy rocks, frozen ponds, cottages, village towers, fences and lanterns move with
-the same travel distance as the track, obstacles and crystals; the character's
-stride follows that distance too. Segments
-recycle behind the camera and reappear
-beyond the distance fade. Two reused nearby lantern lights illuminate the
-scene without real-time shadows; a small snowfall buffer adds gentle wind drift.
-The optimized background images remain
-available for future worlds.
-
-The temporary Aisha character preview uses `public/assets/characters/frost-girl/aisha.glb`
-and its idle animation, with procedural running and jump poses layered over it.
-Set `ACTIVE_CHARACTER` to
-`'placeholder'` in `src/game/player/characterConfig.js` to restore the procedural
-player. A loading failure reports an error and falls back to that player.
-
-Collectibles use [orb of Chi by themighty808](https://sketchfab.com/3d-models/orb-of-chi-5b9b6b38c601459e95b24184d68e3255),
-licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-The game batches and scales the model at runtime, adjusts its material brightness
-and opacity, and adds an instanced energy core and halo with rotation, hover and
-pulse. The original source GLB
-is unchanged; if it fails to load, the game reports the error and uses the
-previous diamond collectible.
+The orbs use [orb of Chi by themighty808](https://sketchfab.com/3d-models/orb-of-chi-5b9b6b38c601459e95b24184d68e3255),
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The game batches the model and restyles its materials at run time (they
+are nearly transparent against a dark background and would vanish against snow); the source GLB file itself is unchanged.
 
 ## The expedition prototype
 

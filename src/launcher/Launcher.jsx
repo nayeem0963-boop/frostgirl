@@ -1,50 +1,23 @@
-// Game selection. Each game is lazy-loaded on its own and launched through a
-// full page navigation (?game=...), so the two never share runtime state.
+// Entry point. Frost, the runner, opens directly: there is no game-selection screen any more. The only other thing reachable is the earlier
+// third-person expedition prototype at ?game=frost&mode=expedition. Every other address, including old ?game=original bookmarks, opens Frost.
 import { lazy, Suspense } from 'react'
-import './launcher.css'
 
-const OriginalGame = lazy(() => import('../App.jsx'))
-const FrostGame = lazy(() => import('../expedition/ExpeditionGame.jsx'))
 const FrostRunner = lazy(() => import('../runner/RunnerGame.jsx'))
+const Expedition = lazy(() => import('../expedition/ExpeditionGame.jsx'))
 // Dev-only asset viewer; compiled out of production builds.
 const ClipViewer = import.meta.env.DEV ? lazy(() => import('../expedition/dev/ClipViewer.jsx')) : null
 
-export function selectedGame() {
-  return new URLSearchParams(window.location.search).get('game')
-}
+const query = () => new URLSearchParams(window.location.search)
+export const selectedGame = () => query().get('game')
 
+const LOADING = { position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', background: '#0a1c38', color: '#f5fbff', font: '600 16px system-ui, sans-serif', letterSpacing: '0.1em' }
 function Loading() {
-  return <div className="launcher-loading">Loading…</div>
-}
-
-function GameSelect() {
-  return (
-    <main className="launcher">
-      <h1 className="launcher-title">Choose your adventure</h1>
-      <div className="launcher-grid">
-        <a className="launcher-card is-original" href="?game=original">
-          <span className="launcher-tag">Endless runner</span>
-          <strong>Frost Girl</strong>
-          <span>Race through the Frozen Kingdom, dodge obstacles and collect orbs.</span>
-        </a>
-        <a className="launcher-card is-frost" href="?game=frost">
-          <span className="launcher-tag">3D runner · new</span>
-          <strong>Frost</strong>
-          <span>Run the snowy trail with Aisha: switch lanes, jump and duck past the ice.</span>
-        </a>
-      </div>
-    </main>
-  )
+  return <div style={LOADING}>Loading Frost…</div>
 }
 
 export default function Launcher() {
-  const game = selectedGame()
-  if (game === 'original') return <Suspense fallback={<Loading />}><OriginalGame /></Suspense>
-  if (game === 'frost' && import.meta.env.DEV && new URLSearchParams(window.location.search).has('viewer')) {
-    return <Suspense fallback={<Loading />}><ClipViewer /></Suspense>
-  }
-  // ?game=frost is the runner (Phase 1); the earlier third-person expedition is kept at ?game=frost&mode=expedition
-  if (game === 'frost' && new URLSearchParams(window.location.search).get('mode') === 'expedition') return <Suspense fallback={<Loading />}><FrostGame /></Suspense>
-  if (game === 'frost') return <Suspense fallback={<Loading />}><FrostRunner /></Suspense>
-  return <GameSelect />
+  const q = query()
+  if (import.meta.env.DEV && q.has('viewer')) return <Suspense fallback={<Loading />}><ClipViewer /></Suspense>
+  if (q.get('mode') === 'expedition') return <Suspense fallback={<Loading />}><Expedition /></Suspense>
+  return <Suspense fallback={<Loading />}><FrostRunner /></Suspense>
 }
