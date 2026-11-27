@@ -18,6 +18,7 @@ import { loadProgress, saveProgress, recordRun, recordEndless, endlessOpen, next
 import { worldIds } from '../worlds/runnerThemes.js'
 import { worlds as allWorlds } from '../worlds/config.js'
 import { RunnerForest } from './scene/RunnerForest.jsx'
+import { slopeFor } from './scene/scenery.js'
 import { Obstacles } from './scene/Obstacles.jsx'
 import { Orbs } from './scene/Orbs.jsx'
 import { RunnerAisha } from './scene/RunnerAisha.jsx'
@@ -27,13 +28,16 @@ import { buzz, hapticsSupported } from './feel.js'
 import { createAudio } from './audio/engine.js'
 import { CHALLENGES, evaluateChallenge, progressLabel } from './challenges.js'
 import { nextLocked, nextOutfit, usableOutfit } from './outfits.js'
-import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, showHint } from './settings.js'
+import { loadSettings, saveSettings, nextChoice, resolveReducedMotion, showHint, showButtons } from './settings.js'
 import { TIERS, TIER_DATA, FrameMeter, activeTier, loadTier, nextTierDown, saveTier, snowCount, startTier } from './quality.js'
 import { createBot, botStep } from './sim/bot.js'
 import { cameraFor, cameraTarget } from './sim/camera.js'
+import { bendTable, curveFor, lookShift } from './bend.js'
+import { createBend, patchScene } from './scene/bendMaterial.js'
 import './runner.css'
 
 const SYSTEM_REDUCED_MOTION = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+const COARSE_POINTER = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
 const DONE_DELAY = 1400 // ms of celebration before the level-complete panel
 const OVER_DELAY = 600 // ms between the impact and the game-over panel / restart being available
 const FLAT_WORLD = { height: () => 0 } // MountainMassif only needs a ground height
@@ -75,7 +79,7 @@ function Shadow({ sim }) {
 }
 
 /** Steps the sim, publishes UI state, and drives the chase camera. */
-function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, meter, adaptive, onDowngrade, audio, debug }) {
+function Loop({ sim, bend, spiral, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, meter, adaptive, onDowngrade, audio, debug }) {
   const gl = useThree((st) => st.gl)
   const scene = useThree((st) => st.scene)
   const cam = useThree((st) => st.camera)
@@ -85,6 +89,7 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceM
   const look = useRef(new Vector3(0, 0.6, -9))
   const tgt = useMemo(() => ({}), [])
   const first = useRef(true)
+  const curve = useRef({ key: '', spiral: null, c: null, straight: false })
 
   useFrame(({ camera, size }, rawDt) => {
     const s = sim.current
@@ -105,9 +110,14 @@ function Loop({ sim, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceM
     audio.frame(s) // footsteps, hazard warnings and the wind bed follow the run
     if (debug) { debug.frames = (debug.frames ?? 0) + 1; const ms = performance.now() - t0; debug.simMs = (debug.simMs ?? ms) * 0.95 + ms * 0.05 }
 
+    // the spiral trail: the path ahead of the runner for this distance (bend.js), shared with every patched material
+    const key = `${reduceMotion.current}|${s.endless}|${s.world?.finishDistance}`
+    if (curve.current.key !== key || curve.current.spiral !== spiral) curve.current = { key, spiral, c: curveFor(spiral, { reduce: reduceMotion.current, finish: s.endless ? null : s.world?.finishDistance ?? null }), straight: false }
+    if (curve.current.c || !curve.current.straight) { bendTable(curve.current.c, s.dist, bend.table); bend.push(bend.table); curve.current.straight = !curve.current.c }
+
     const rig = cameraFor(size.width / size.height)
     if (camera.fov !== rig.fov) { camera.fov = rig.fov; camera.updateProjectionMatrix() }
-    cameraTarget(rig, s, tgt)
+    cameraTarget(rig, s, tgt, curve.current.c ? lookShift(bend.table) : 0)
     const k = first.current ? 1 : 1 - Math.exp(-7 * dt)
     first.current = false
     pos.current.x += (tgt.px - pos.current.x) * k
@@ -198,7 +208,15 @@ function MistFog({ sim, theme }) {
   return null
 }
 
-function Scene({ sim, quality, world, endless, outfit, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, audio, debug }) {
+/** Makes everything that belongs to the trail follow the spiral (scene/bendMaterial.js): new materials are patched before they draw. */
+function BendPatch({ bend }) {
+  const scene = useThree((st) => st.scene)
+  const n = useRef(0)
+  useFrame(() => { if (n.current++ < 40 || n.current % 6 === 0) patchScene(scene, bend) })
+  return null
+}
+
+function Scene({ sim, bend, quality, world, endless, outfit, onPhase, onScore, onOrbs, onClose, onJump, haptics, reduceMotion, highContrast, meter, adaptive, onDowngrade, audio, debug }) {
   const t = world.runner // this world's theme: src/worlds/runnerThemes.js (World 01 = the original look)
   return (
     <>
@@ -207,25 +225,26 @@ function Scene({ sim, quality, world, endless, outfit, onPhase, onScore, onOrbs,
       <hemisphereLight args={[t.light.hemiSky, t.light.hemiGround, t.light.hemiIntensity]} />
       <ambientLight intensity={t.light.ambientIntensity} color={t.light.ambient} />
       <directionalLight position={SUN_POSITION} color={t.light.sun} intensity={t.light.sunIntensity} />
-      <Loop sim={sim} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} debug={debug} />
+      <Loop sim={sim} bend={bend} spiral={t.spiral} onPhase={onPhase} onScore={onScore} onOrbs={onOrbs} onClose={onClose} onJump={onJump} haptics={haptics} reduceMotion={reduceMotion} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} debug={debug} />
       {t.mist && <MistFog sim={sim} theme={t} />}
       {t.gust && <Gusts sim={sim} gust={t.gust} />}
-      <Sky colors={t.sky} />
+      <BendPatch bend={bend} />
+      <group userData={{ noBend: true }}><Sky colors={t.sky} /></group>
       <Ground sim={sim} theme={t} />
       <Obstacles sim={sim} highContrast={highContrast} />
       {!endless && <FinishGate sim={sim} />}
-      <Shadow sim={sim} />
+      <group userData={{ noBend: true }}><Shadow sim={sim} /></group>
       <HitBurst sim={sim} />
-      <Snowfall count={snowCount(t, quality)} paused={false} color={t.snow.color} />
+      <group userData={{ noBend: true }}><Snowfall count={snowCount(t, quality)} paused={false} color={t.snow.color} /></group>
       <Suspense fallback={null}>
-        <RunnerForest sim={sim} quality={quality} />
-        <RunnerAisha sim={sim} debug={debug} outfit={outfit} />
+        <RunnerForest sim={sim} quality={quality} slope={slopeFor(t)} />
+        <group userData={{ noBend: true }}><RunnerAisha sim={sim} debug={debug} outfit={outfit} /></group>
         <Orbs sim={sim} />
         {t.hazards?.wolf && <Wolves sim={sim} />}
         <Ready />
       </Suspense>
       <Suspense fallback={null}>
-        {t.backdrop ? <Backdrop url={world.background} crop={t.backdrop.crop} sim={t.mist ? sim : null} /> : <MountainMassif world={FLAT_WORLD} />}
+        <group userData={{ noBend: true }}>{t.backdrop ? <Backdrop url={world.background} crop={t.backdrop.crop} sim={t.mist ? sim : null} /> : <MountainMassif world={FLAT_WORLD} />}</group>
       </Suspense>
     </>
   )
@@ -236,6 +255,11 @@ function Ready() {
   useEffect(() => { readyCb() }, [])
   return null
 }
+
+const PAD = [ // on-screen buttons: lane changes on one side, jump and slide on the other (Left-handed layout swaps the sides in CSS)
+  { side: 'move', keys: [{ cmd: 'left', label: 'LEFT', aria: 'Move left' }, { cmd: 'right', label: 'RIGHT', aria: 'Move right' }] },
+  { side: 'act', keys: [{ cmd: 'jump', label: 'JUMP', aria: 'Jump' }, { cmd: 'duck', label: 'SLIDE', aria: 'Slide' }] },
+]
 
 function Stars({ n, big }) {
   return (
@@ -284,6 +308,7 @@ export default function RunnerGame() {
   const [autoTier, setAutoTier] = useState(() => startTier(detectQuality(), loadTier()))
   const quality = flags.tier ?? activeTier(settings.quality, autoTier)
   const meter = useMemo(() => new FrameMeter(), [])
+  const bend = useMemo(() => createBend(), []) // the spiral trail's shared path table (scene/bendMaterial.js)
   const audio = useMemo(() => createAudio(), []) // synthesized sound (audio/engine.js): created in a user gesture, silent in Auto play
   useEffect(() => { audio.setEnabled(settings.sound) }, [audio, settings.sound])
   useEffect(() => { audio.setMusicEnabled(settings.music) }, [audio, settings.music])
@@ -296,7 +321,7 @@ export default function RunnerGame() {
   const glConfig = useMemo(() => ({ antialias: quality === 'high', powerPreference: 'high-performance', toneMapping: ACESFilmicToneMapping, outputColorSpace: SRGBColorSpace }), []) // eslint-disable-line react-hooks/exhaustive-deps -- antialiasing is fixed when the canvas is created
   const root = useRef(null)
   const debug = useMemo(() => (new URLSearchParams(window.location.search).has('debug') ? {} : null), [])
-  useEffect(() => { if (debug) { debug.meter = meter; debug.audio = audio } }, [debug, meter, audio]) // ?debug: tests shorten the meter's window and read the sound counters
+  useEffect(() => { if (debug) { debug.meter = meter; debug.audio = audio; debug.bend = bend } }, [debug, meter, audio, bend]) // ?debug: tests shorten the meter's window, read the sound counters and the spiral path
   const hitAt = useRef(0)
   const progressRef = useRef(progress)
   useEffect(() => { progressRef.current = progress }, [progress])
@@ -314,6 +339,13 @@ export default function RunnerGame() {
     clearTimeout(autoTimer.current)
     startRun(s, (Math.random() * 1e9) | 0, { difficulty: difficultyRef.current, endless: endlessRef.current })
     setAuto(false); setScore(0); setOrbs(0); setEndless(endlessRef.current)
+  }, [])
+  const restart = useCallback(() => { // the in-game Restart button: a fresh run of the same kind, straight away (also from the pause screen)
+    const s = sim.current
+    if (s.phase !== 'running' || s.auto) return
+    clearTimeout(autoTimer.current)
+    startRun(s, (Math.random() * 1e9) | 0, { difficulty: difficultyRef.current, endless: endlessRef.current })
+    setScore(0); setOrbs(0); setPaused(false)
   }, [])
   const startLevel = useCallback(() => { endlessRef.current = false; start() }, [start])
   const startEndless = useCallback(() => { endlessRef.current = true; start() }, [start])
@@ -427,7 +459,7 @@ export default function RunnerGame() {
         camera={{ fov: 58, near: 0.1, far: 7000, position: [0, 2.7, 5.6] }}
         gl={glConfig}
       >
-        <Scene sim={sim} quality={quality} world={world} endless={endless} outfit={outfit} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
+        <Scene sim={sim} bend={bend} quality={quality} world={world} endless={endless} outfit={outfit} meter={meter} adaptive={adaptive} onDowngrade={onDowngrade} audio={audio} onPhase={onPhase} onScore={setScore} onOrbs={setOrbs} onClose={onClose} onJump={onJump} haptics={hapticsRef} reduceMotion={reduceRef} highContrast={settings.highContrast} debug={debug} />
       </Canvas>
 
       {close > 0 && phase === 'running' && <span key={close} className="runner-close" aria-hidden="true" data-testid="close-call">Close!</span>}
@@ -437,8 +469,27 @@ export default function RunnerGame() {
         {saved.best > 0 && !auto && <span className="runner-best">Best {saved.best} m</span>}
         {auto && <span className="runner-auto" data-testid="auto-badge">Auto play</span>}
         {auto && <button className="runner-stop" onClick={exitAuto}>Stop</button>}
-        {phase === 'running' && !auto && <button className="runner-pause" onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶' : 'Ⅱ'}</button>}
+        {saved.stars > 0 && !auto && <span className="runner-hud-stars" data-testid="hud-stars" aria-label={`best ${saved.stars} of 3 stars`}><Stars n={saved.stars} /></span>}
+        {phase === 'running' && !auto && (
+          <span className="runner-hud-btns">
+            <button className="runner-restart" onClick={restart} aria-label="Restart" data-testid="restart-btn">↻</button>
+            <button className="runner-pause" onClick={togglePause} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? '▶' : 'Ⅱ'}</button>
+          </span>
+        )}
       </div>
+      {phase === 'running' && !paused && !auto && showButtons(settings, COARSE_POINTER) && (
+        <div className="runner-pad" data-testid="pad" role="group" aria-label="Controls">
+          {PAD.map((g) => (
+            <span key={g.side} className={`runner-pad-${g.side}`}>
+              {g.keys.map((k) => (
+                <button key={k.cmd} className="runner-key" data-cmd={k.cmd} aria-label={k.aria}
+                  onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); command(sim.current, k.cmd) }}
+                  onPointerUp={(e) => e.stopPropagation()}>{k.label}</button>
+              ))}
+            </span>
+          ))}
+        </div>
+      )}
 
       {phase !== 'ready' && !showOver && endless && !auto && <span className="runner-mode" data-testid="endless-badge">Endless</span>}
       {phase !== 'ready' && !showOver && !endless && (
@@ -507,6 +558,7 @@ export default function RunnerGame() {
             <li><button className="runner-btn runner-btn-alt" data-testid="difficulty" onClick={() => change({ difficulty: nextChoice('difficulty', settings.difficulty) })}>Difficulty: {settings.difficulty}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ motion: nextChoice('motion', settings.motion) })}>Reduce motion: {settings.motion}</button></li>
             <li><button className="runner-btn runner-btn-alt" onClick={() => change({ quality: nextChoice('quality', settings.quality) })}>Graphics: {settings.quality}{settings.quality === 'auto' ? ` (${quality})` : ''}</button></li>
+            <li><button className="runner-btn runner-btn-alt" data-testid="buttons-setting" onClick={() => change({ buttons: nextChoice('buttons', settings.buttons) })}>On-screen buttons: {settings.buttons}{settings.buttons === 'auto' ? ` (${showButtons(settings, COARSE_POINTER) ? 'on' : 'off'})` : ''}</button></li>
             <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.leftHanded} onClick={() => change({ leftHanded: !settings.leftHanded })}>Left-handed layout: {settings.leftHanded ? 'on' : 'off'}</button></li>
             <li><button className="runner-btn runner-btn-alt" role="switch" aria-checked={settings.highContrast} onClick={() => change({ highContrast: !settings.highContrast })}>High-contrast obstacles: {settings.highContrast ? 'on' : 'off'}</button></li>
           </ul>
@@ -522,6 +574,7 @@ export default function RunnerGame() {
         <div className="runner-screen" data-screen="paused">
           <h2>Paused</h2>
           <button className="runner-btn" onClick={togglePause}>Resume</button>
+          <button className="runner-btn runner-btn-alt" onClick={restart} data-testid="pause-restart">Restart</button>
         </div>
       )}
 

@@ -19,6 +19,7 @@ const WORLD_1 = {
   ground: { base: '#f2f6fb', speck: [170, 195, 225], spread: [50, 40, 25] },
   trail: { base: '#d3e1f0', speck: [150, 175, 205], spread: [40, 35, 30], shade: [120, 160, 205], divider: [70, 130, 205], rail: [55, 115, 200] },
   backdrop: null,
+  spiral: null, // the trail curves like a spiral up the mountain: { turn, wobble, rise, hills } (see runner/bend.js); null = straight
   hazards: {},
   gust: null, // World 06: { startAt, period, jitter } (see sim/gust.js)
   mist: null, // World 05: { startAt, period, length, ramp, near, far, color } (see sim/mist.js)
@@ -39,7 +40,7 @@ const world = (over) => ({
 })
 
 export const runnerThemes = {
-  '01': WORLD_1,
+  '01': { ...WORLD_1, spiral: { turn: 0.0022, wobble: 0.35, rise: 0.012, hills: 0.4 } }, // the Frozen Kingdom: a gentle bend and a slow climb
   // Whispering Ice Forest: teal dusk, dense groves -> more slaloms
   '02': world({
     sky: { zenith: '#4d8b9c', mid: '#8cc0cc', horizon: '#d6ecee', sun: '#fff0d8' },
@@ -64,6 +65,7 @@ export const runnerThemes = {
     backdrop: { crop: 0.42 },
     hazards: { shard: true }, // crystal spires fall into lanes (a marker shows the lane first)
     patternWeights: { ridge: 1.4, archWall: 1.3, shard: 1.6, shardWall: 1.0, shardPair: 0.8 },
+    spiral: { turn: 0.0065, wobble: 0.4, rise: 0.02, hills: 0.7 }, // the spiral mountain trail from the original Frost Girl: a steady bend and a real climb
     finishDistance: 1600,
   }),
   // Frozen Ocean: glassy cyan, wide open -> arches and wall+ridge

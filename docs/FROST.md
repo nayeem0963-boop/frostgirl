@@ -1,3 +1,46 @@
+# Frost — Phase 7.2: the spiral mountain trail and one HUD
+
+Second half of "Retire Frost Girl & integrate the spiral mountain adventure" (7.1 removed the prototype and its entry points).
+
+## The spiral trail
+- **Drawn, not simulated.** The sim is unchanged: a straight three-lane track, runner at z = 0, the world scrolling toward her. `src/runner/bend.js` computes, for the
+  current run distance, the path of a curving, climbing trail *relative to the runner* (57 rows, one per 8 m, from 40 m behind her to 408 m ahead). `scene/bendMaterial.js`
+  patches every material of the trail, obstacles, orbs, trees, wolves, gusts, finish gate and impact shards with a small vertex-shader change (`project_vertex`) that
+  moves each vertex onto that path. At s = 0 the offset and heading are exactly zero (unit-tested for every world and many distances), so a lane is still exactly a lane,
+  collisions and the bot are untouched, and there is no drift. Aisha, the sky, the painted backdrop / 3D massif, falling snow and her blob shadow are not bent.
+- **The path** is the original track's idea: the heading turns one way with a slowly changing curvature (the original's radius wobble), and the trail climbs with gentle
+  rolling hills (<= ~5 degrees). World 03 (Crystal Mountains): curvature 0.0065 /m (radius ~150 m, wobble 40%), climb 0.02 m/m. World 01: 0.0022 /m, climb 0.012 m/m.
+  The other worlds are straight (`spiral: null` in `runnerThemes.js`); any world can opt in with one line of data.
+- **Camera** aims 60% of the way toward where the trail is 24 m ahead (`lookShift`), through the existing damping, so it turns into the bend smoothly.
+- **Terrain:** the snow ground and trail are subdivided every 5 m so they bend smoothly, and mountain worlds get a steeper snow ridge beside the trail (0.085 instead of
+  0.045 per metre past 14 m; trees follow it).
+- **Easing:** straight for the first metres, the curve eases in over 90 m and out over the last 90 m before the finish (no easing out in Endless).
+- **Reduce motion** (the setting or the system preference): 45% of the bend, no wobble, no rolling hills, half the climb: a fixed, steady curve.
+- **Graphics:** works at every tier; no new draw calls, no new geometry beyond the 5 m subdivision of two meshes (about 17k extra vertices for the ground).
+- Bent objects are not frustum-culled (their bounds are the straight ones).
+
+## One HUD, one set of controls
+- While running: distance (m), orb counter, best stars of the world, **Pause** and **Restart** (new: starts a fresh run of the same kind at once; also on the pause screen).
+  Best distance shows beside them. Auto play shows its badge and Stop instead (watch-only, no buttons).
+- **On-screen buttons** (new setting, auto / on / off; auto = touch screens): LEFT / RIGHT on one side, JUMP / SLIDE on the other, low on the screen. They send the same
+  commands as keys and swipes and do not start swipes. **Left-handed layout** swaps the two groups and moves Pause / Restart to the left.
+- Saves: `frost-runner-settings-v1` gains `buttons` (older saves read as `auto`); progress is untouched. The retired prototype kept no saved data, so nothing needed migrating.
+- Scene cleanup: the ground, trail and textures are now disposed when a world is switched (before, each switch left two geometries behind).
+
+## Tests (run here)
+- `tests/bend.test.js` (new, 13 tests): only Worlds 01 and 03 curve; zero offset at the runner for every world and distance; lanes unchanged; straight start; ease-out
+  at the finish and none in Endless; arc length conserved and heading changes <= ~6 degrees per 8 m; a fixed point on the trail moves continuously from frame to frame over
+  1700 m; grade <= 5 degrees; Reduce motion gentler and steady; camera shift; terrain slope.
+- Browser (software GL, production build): the new `ONLY=spiral` section (47 checks: the bend on World 03 and World 01, lane / jump / slide on the curve, Reduce motion, the lowest
+  Graphics tier, switching worlds five times with Restart and Pause in each, geometry count 31 -> 31, the on-screen buttons on a phone-size touch screen, Left-handed, the
+  setting, Auto play, no page errors) passed after I fixed my own too-tight start-of-run threshold. The full run (all sections) passed except three failures that were test
+  problems, fixed here: Ember's colour count was thrown off by an orb floating in front of Aisha (the test now clears orbs), a mute check read its baseline before M took
+  effect, and the expedition check did not wait for its models to load. The sections `entry,outfit,sound,spiral` then passed again (91/91); `settings,endless,offline,quality,
+  challenge,music,phone` passed in the second run on the final code (the earlier sections ran on a build that differed only in a CSS class name of the Restart button).
+- Renderer budget on World 03 (`runner-perf.mjs --world=03`): desktop everything 23-24 draw calls, 245-250k triangles; phone portrait 22-24 draw calls, 192-203k triangles: inside the 350k / 30
+  budget; the bend adds no draw calls. Sim + camera step 0.15-0.2 ms. Frame rates on real devices are still unmeasured.
+- Not done: no real-device test of the bend or the buttons; no human has judged how the curve feels to play (it is drawn only, but a sharp bend 100 m ahead looks dramatic).
+
 # Frost — Phase 7.1: retiring "Frost Girl"
 
 On request, the standalone **Frost Girl** prototype (`?game=original`: the spiral-track runner with its own app, HUD and tests) is gone and **Frost**

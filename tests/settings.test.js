@@ -6,7 +6,7 @@ import { HAPTICS_KEY } from '../src/runner/feel.js'
 const mem = (init = {}) => { const m = new Map(Object.entries(init)); return { m, getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) } }
 
 test('defaults: everything on its safe default, nothing hidden', () => {
-  assert.deepEqual(DEFAULT_SETTINGS, { haptics: true, sound: true, music: true, motion: 'auto', quality: 'auto', leftHanded: false, highContrast: false, outfit: 'frost', difficulty: 'normal', hintSeen: false })
+  assert.deepEqual(DEFAULT_SETTINGS, { haptics: true, sound: true, music: true, motion: 'auto', buttons: 'auto', quality: 'auto', leftHanded: false, highContrast: false, outfit: 'frost', difficulty: 'normal', hintSeen: false })
   assert.deepEqual(loadSettings(mem()), DEFAULT_SETTINGS)
 })
 

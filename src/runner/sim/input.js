@@ -37,7 +37,11 @@ export function attachInput(el, onCommand, { onTap, onKey } = {}) {
   const keyup = (e) => down.delete(e.code)
   const blur = () => down.clear()
   let g = null
-  const pdown = (e) => { if (e.pointerType === 'mouse' && e.button !== 0) return; g = { id: e.pointerId, x: e.clientX, y: e.clientY, fired: false } }
+  const pdown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    if (e.target?.closest?.('button')) return // buttons (pause, restart, the on-screen pad) are not swipes
+    g = { id: e.pointerId, x: e.clientX, y: e.clientY, fired: false }
+  }
   const pmove = (e) => {
     if (!g || e.pointerId !== g.id || g.fired) return
     const cmd = classifySwipe(e.clientX - g.x, e.clientY - g.y)
