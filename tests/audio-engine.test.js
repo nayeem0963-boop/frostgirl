@@ -17,6 +17,8 @@ function fakeAudio() {
     createBufferSource() { log.noise++; const n = node({ start() { log.started.push('noise') }, stop() {} }); log.sources.push(n); return n }
     createBiquadFilter() { log.filters++; return node({ frequency: param(), Q: param() }) }
     createStereoPanner() { log.panners++; return node({ pan: { value: 0 } }) }
+    createDelay() { return node({ delayTime: param() }) }
+    createWaveShaper() { log.shapers = (log.shapers ?? 0) + 1; return node({ curve: null, oversample: 'none' }) }
     createDynamicsCompressor() { return node({ threshold: param(), knee: param(), ratio: param(), attack: param(), release: param() }) }
     createBuffer(c, n) { const d = new Float32Array(n); return { getChannelData: () => d } }
   }
@@ -106,4 +108,67 @@ test('the wind bed starts on the first frame, goes silent when the player is not
   assert.doesNotThrow(() => a.frame(sim({ phase: 'gameover' })))
   for (const name of Object.keys(RECIPES)) if (name !== 'complete') assert.doesNotThrow(() => a.event(name, sim()), name)
   assert.doesNotThrow(() => a.suspend()); assert.doesNotThrow(() => a.resume())
+})
+
+// ---- music ----------------------------------------------------------------------------------------------------------------------
+const musicSim = (over = {}) => sim({ phase: 'ready', dist: 0, ...over })
+
+test('music: starts after the first gesture on the start screen, one bar at a time, a little ahead of the clock', () => {
+  const f = fakeAudio(); const a = createAudio({ AudioContext: f.AudioContext }); assert.equal(a.stats.music.bars, 0)
+  a.unlock(); f.ctx().state = 'running'
+  a.frame(musicSim())
+  assert.equal(a.stats.music.bars, 1, 'the first bar is scheduled')
+  assert.ok(a.stats.music.notes > 3 && f.log.osc > 3, 'a bar is several notes')
+  a.frame(musicSim()); assert.equal(a.stats.music.bars, 1, 'not again until the clock comes within the lookahead')
+  f.ctx().currentTime = 5; a.frame(musicSim())
+  assert.equal(a.stats.music.bars, 2, 'the next bar, once it is due')
+})
+
+test('music is silent for Auto play, when Sound is off, when Music is off and while paused (nothing is even scheduled)', () => {
+  const run = (setup, s) => { const f = fakeAudio(); const a = createAudio({ AudioContext: f.AudioContext }); a.unlock(); f.ctx().state = 'running'; setup(a); a.frame(s); return a.stats.music.bars }
+  assert.equal(run(() => {}, musicSim({ auto: true })), 0)
+  assert.equal(run((a) => a.setEnabled(false), musicSim()), 0)
+  assert.equal(run((a) => a.setMusicEnabled(false), musicSim()), 0)
+  assert.equal(run(() => {}, musicSim({ phase: 'running', paused: true })), 0)
+  assert.equal(run(() => {}, musicSim()), 1, 'and it does play when none of those apply')
+  const f = fakeAudio(); const a = createAudio({ AudioContext: f.AudioContext }); a.unlock()
+  f.ctx().state = 'suspended'; a.frame(musicSim()); assert.equal(a.stats.music.bars, 0, 'a suspended context (hidden tab) schedules nothing')
+})
+
+test('music changes key with the world, at the next bar', () => {
+  const f = fakeAudio(); const freqs = []
+  class Spy extends f.AudioContext { createOscillator() { const n = super.createOscillator(); n.frequency.setValueAtTime = (v) => freqs.push(Math.round(v)); return n } }
+  const a = createAudio({ AudioContext: Spy, random: () => 0.5 }); a.unlock(); f.ctx().state = 'running'
+  a.setWorld('01'); a.frame(musicSim()); const w1 = [...new Set(freqs)]
+  f.ctx().currentTime = 5; a.frame(musicSim()) // bar 1: bells only
+  freqs.length = 0; f.ctx().currentTime = 9; a.setWorld('04'); a.frame(musicSim()); const w4 = [...new Set(freqs)] // bar 2: a new chord, in World 04's key
+  assert.ok(w1.length > 3 && w4.length > 3)
+  assert.notDeepEqual(w1.sort((x, y) => x - y), w4.sort((x, y) => x - y), 'a different world is a different key')
+})
+
+test('a long stall does not release a burst of old bars: it catches up with a single new one', () => {
+  const f = fakeAudio(); const a = createAudio({ AudioContext: f.AudioContext }); a.unlock(); f.ctx().state = 'running'
+  a.frame(musicSim()); f.ctx().currentTime = 600; a.frame(musicSim())
+  assert.equal(a.stats.music.bars, 2)
+})
+
+test('music never uses up the effects\' voices, and the notes it plays are bounded', () => {
+  const f = fakeAudio(); const a = createAudio({ AudioContext: f.AudioContext }); a.unlock(); f.ctx().state = 'running'
+  for (let i = 0; i < 30; i++) { f.ctx().currentTime = i * 3.5; a.frame(musicSim()) }
+  assert.ok(a.stats.music.bars >= 20)
+  assert.equal(a.event('jump', sim()), true, 'effects still play with the music running')
+  assert.ok(a.stats.voices <= MAX_VOICES)
+})
+
+test('the output ends in a soft clipper: unity at small signals, bounded at full scale, odd-symmetric (so it adds no offset)', () => {
+  const f = fakeAudio(); const a = createAudio({ AudioContext: f.AudioContext }); a.unlock()
+  assert.equal(f.log.shapers, 1, 'one soft clipper on the way to the speakers')
+  // the same curve and gains as the engine builds: pre 0.4, tanh(3x)/tanh(3), post 1/1.2
+  const out = (v) => { const x = Math.max(-1, Math.min(1, 0.4 * v)); return (Math.tanh(3 * x) / Math.tanh(3)) / 1.2 }
+  assert.ok(Math.abs(out(0.05) - 0.05) < 0.003, 'quiet sounds pass at unity')
+  assert.ok(Math.abs(out(0.2) - 0.2) < 0.01 && Math.abs(out(0.3) - 0.3) < 0.02)
+  assert.ok(out(1.34) < 0.84 && out(10) < 0.84, 'nothing can exceed about 0.83 of full scale, however loud the mix')
+  assert.ok(out(0.6) > 0.5 && out(0.6) < 0.6, 'a loud peak is only gently rounded')
+  assert.equal(out(-0.7), -out(0.7))
+  for (let v = 0; v < 3; v += 0.1) assert.ok(out(v + 0.1) >= out(v), 'monotonic: a louder input is never quieter')
 })

@@ -1,3 +1,39 @@
+# Frost — Phase 7.0: music
+
+A calm, generative music loop, synthesized with Web Audio like the effects (nothing to download, works offline). **I cannot hear it**: I wrote the
+rules so it cannot sound harsh (see below) and measured it, but whether it is *pleasant* is for you to judge; the numbers are plain constants.
+
+- **What it is** (`audio/music.js`, pure rules): only notes from a pentatonic scale, so any mix is consonant. A slow pad (a triangle and a slightly
+  detuned sine per note) changes chord every two bars through a gentle loop that always comes home, a soft bass root, and sparse bell notes (about
+  330-1400 Hz) that are mostly chord tones. Each bar is generated from a seeded random source: it never repeats exactly but is reproducible in tests.
+- **Each world has its own key, scale and tempo:** 01 A major 68 bpm, 02 G minor 64, 03 D major 72 (the most bells: bright crystals), 04 E minor 60,
+  05 F major 56 (the slowest, sparsest: dreamy mist), 06 B major 76, 07 C major 80 with an extra upper pad voice (the finale is fuller). The music retunes at the next bar when the world changes.
+- **Behaviour:** it starts on the first tap or key press, plays softly on the start screen, at full level while running, is silent when paused (nothing is
+  even scheduled), softer after a crash, and is muffled in thick mist like the wind. A crash or a level chime ducks it for a moment so the effect is heard.
+  **Off for Auto play.** Settings > Music switches the music off on its own; Settings > Sound and the `M` key silence everything. Music has its own
+  voice limit (16 notes), so it never uses up the effects' limit.
+- **Measured** (`node scripts/audio-report.mjs` now includes it; the noise is seeded so the numbers are reproducible): in every world the music peaks
+  at 0.11-0.13 and its loudness (RMS) is about 0.02, which is quiet and well under the effects (the crash peaks at 0.58); it is never silent after its
+  first bars; with a crash and three chimes on top the mix peaks at 0.79. It is deliberately on the quiet side because I cannot judge taste: raise
+  `MUSIC_GAIN` in `audio/engine.js` if you want more.
+- **A bug the measurement found, and fixed for the effects too:** a crash landing together with orb chimes after a quiet moment peaked at **1.34**
+  (over full scale, so it would distort) **even with the music off**. The browser's compressor is not a true limiter. The output now ends in a soft clipper:
+  quiet and normal sounds pass at unity (within 1.5% up to 0.2), only big peaks are rounded (about -14% at 0.6), and the output can never exceed 0.83 of
+  full scale, however loud the mix. I first tried a harder compressor setting instead and reverted it: it adds automatic makeup gain and made every
+  effect about 80% louder, which would have changed the balance merged in 6.2.
+
+## Tests (run here)
+- `npm test`: 294/294 (new `tests/music.test.js`, 8 tests: world data, pitch maths, deterministic random source, every note of every bar in every world in
+  the pentatonic scale, chord loop, sparse and soft with bounded pitches and gains, the extra voice in World 07, state volumes and the mist filter;
+  and 6 new engine tests with the fake audio context: scheduling a bar ahead of the clock, silence for Auto play / Sound off / Music off / paused /
+  hidden tab, retuning per world, no burst after a stall, separate voice limit, and the soft clipper's maths).
+- `ONLY=music` 12/12 in headless Chrome with real Web Audio and the engine's counters: nothing before the first tap, Music switch on by default,
+  music begins on the start screen and keeps going bar by bar while running, retunes for World 04, nothing scheduled while paused, the switch turns it
+  off and is saved while effects still play, Auto play plays none, `M` stops it.
+- Regression `ONLY=desktop,phone,auto,level,worlds,select,settings,feel,endless,offline,quality,sound,music,challenge,outfit` 248/248 (whole levels in the browser; the Retry/Restart button inside the viewport at 1534x630 and on phones; the Settings sheet with its new switch fits on phones in both orientations).
+- **Not verified:** how it sounds (taste, repetition over a long session, whether it is too quiet or too loud on real phone speakers), and the CPU
+  cost of a continuous pad on a low-end phone (about 8-20 oscillators at once; not measured).
+
 # Frost — Phase 6.9: an accurate README
 
 The README still described the early spiral prototype ("other playable worlds and audio are not implemented yet") and did not mention the runner
